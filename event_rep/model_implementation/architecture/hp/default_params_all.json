@@ -1,0 +1,18 @@
+{
+  "batch_size": 1024,
+  "dropout_rate": 0.2,
+  "embedding_type": "random",
+  "epochs": 25,
+  "freeze_role_embeddings": false,
+  "freeze_word_embeddings": false,
+  "hidden_neurons": 512,
+  "l1_regularization": 0.0,
+  "l2_regularization": 0.0,
+  "language_model": null,
+  "learning_rate": 0.01,
+  "learning_rate_decay": 0.0,
+  "loss_weight_role": 1.0,
+  "pretrained_embedding_size": 300,
+  "role_embedding_dimension": 300,
+  "word_embedding_dimension": 300
+}
