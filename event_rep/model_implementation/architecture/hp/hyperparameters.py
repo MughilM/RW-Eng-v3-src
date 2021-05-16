@@ -41,6 +41,7 @@ class HyperparameterSet:
         self.embedding_type = ''
         self.word_embedding_dimension = 0
         self.role_embedding_dimension = 0
+        self.n_factors_cls = 0
         self.hidden_neurons = 0
         self.pretrained_embedding_size = 0
         self.language_model = ''
