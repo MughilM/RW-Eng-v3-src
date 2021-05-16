@@ -16,4 +16,5 @@
   "pretrained_embedding_size": 300,
   "role_embedding_dimension": 300,
   "word_embedding_dimension": 300,
+  "zero_out_miss_embedding": true
 }

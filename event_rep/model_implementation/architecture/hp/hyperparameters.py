@@ -18,7 +18,8 @@ class HyperparameterSet:
     def __init__(self, output_dir, description_file, default_hp_file='default_params_all.json'):
         """
         Initializer for the default hyperparameter set. The implementation shouldn't be changed
-        unless hyperparameters are added.
+        unless hyperparameters are added. Anyone looking at the source code, do not pay attention
+        to the values defined here, as they are immediately overwritten by the values in the JSONs.
         :param output_dir: The directory to output the final hyperparameter JSON
         :param description_file: The path to the data description file that contains vocabulary data
         :param default_hp_file: The JSON that contains the default hyperparameters
@@ -45,6 +46,7 @@ class HyperparameterSet:
         self.hidden_neurons = 0
         self.pretrained_embedding_size = 0
         self.language_model = ''
+        self.zero_out_miss_embedding = False
         # Vocabulary parameters.
         self.missing_role_id = 0
         self.missing_word_id = 0
