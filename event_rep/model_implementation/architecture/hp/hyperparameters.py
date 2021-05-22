@@ -14,6 +14,8 @@ import os
 import pickle
 import logging
 
+logger = logging.getLogger(__name__)
+
 
 class HyperparameterSet:
     def __init__(self, SRC_DIR, output_dir='./', default_hp_file='default_params_all.json'):
@@ -125,5 +127,5 @@ def update_object_params_dict(obj, d: dict):
         if hasattr(obj, paramName):
             setattr(obj, paramName, value)
         else:
-            logging.warn(f'{paramName} not in class variables. Please update class if variable is needed.'
-                         f'Skipping for now...')
+            logger.warning(f'{paramName} not in class variables. Please update class if variable is needed.'
+                           f'Skipping for now...')

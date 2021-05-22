@@ -20,14 +20,22 @@ SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 EXPERIMENT_DIR = os.path.join(SRC_DIR, 'experiments')
 # Pretrained embeddings
 PRETRAINED_DIR = os.path.join(SRC_DIR, 'pretrained_embeddings')
+# Directory where raw processed CSVs go when we need to split up a large file
+# for efficient tensorflow reading.
+CSV_PIECE_PATH = os.path.join(SRC_DIR, 'csv_piece_output')
 # Primary data path for data...
 DATA_PATH = os.path.join(SRC_DIR, 'processed_data')
+# Generate the huperparameter set from the SRC DIR
+hp_set = HyperparameterSet(SRC_DIR)
+
+# Make the directories if they don't already exist.
+for directory in [EXPERIMENT_DIR, PRETRAINED_DIR, CSV_PIECE_PATH, DATA_PATH]:
+    os.makedirs(directory, exist_ok=True)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a thematic fit model')
     # Create the hyperparameter set, which sets all of our default parameters.
-    hp_set = HyperparameterSet(SRC_DIR)
 
     # Required parameters
     # TODO: Add models to choices

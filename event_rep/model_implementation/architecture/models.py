@@ -24,6 +24,7 @@ from gensim.models import KeyedVectors
 
 import os
 import requests
+import logging
 
 
 class MTRFv4Res(Model):
@@ -31,6 +32,7 @@ class MTRFv4Res(Model):
         super(MTRFv4Res, self).__init__()
         self.hp_set = hp_set
         self.PRETRAINED_DIR = pretrained_emb_dir
+        self.logger = logging.getLogger(__name__)
         # Set up the 4 inputs necessary...
         self.input_words = Input(shape=(self.hp_set.role_vocab_count - 1), dtype=tf.uint32, name='Input Words')
         self.input_roles = Input(shape=(self.hp_set.role_vocab_count - 1), dtype=tf.uint32, name='Input Roles')
@@ -182,12 +184,13 @@ class MTRFv4Res(Model):
             # We can't control download location with utils.download_model
             fasttext_emb_path = os.path.join(self.PRETRAINED_DIR, 'cc.en.300.bin.gz')
             if not os.path.exists(fasttext_emb_path):
-                print(f'Fasttext embeddings not present. Downloading file (~4.2 GB) to {fasttext_emb_path}...', end='')
+                self.logger.info(f'Fasttext embeddings not present. '
+                                 f'Downloading file (~4.2 GB) to {fasttext_emb_path}...', end='')
                 fasttext_url = 'https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.en.300.bin.gz'
                 r = requests.get(fasttext_url, allow_redirects=True)
                 open(fasttext_emb_path, 'wb').write(r.content)
-                print('Done!')
-            print(f'Reading Fasttext embeddings from {fasttext_emb_path}')
+                self.logger.info('Done!')
+            self.logger.info(f'Reading Fasttext embeddings from {fasttext_emb_path}')
             fasttext_model = fasttext.load_model(fasttext_emb_path)
             # Unfortunately, there is no way to grab the fasttext embedding matrix,
             # we need to do it one at a time.
@@ -204,12 +207,12 @@ class MTRFv4Res(Model):
         elif embedding_source == 'w2v':
             w2v_emb_path = os.path.join(self.PRETRAINED_DIR, 'GoogleNews-vectors-negative300.bin.gz')
             if not os.path.exists(w2v_emb_path):
-                print(f'Word2Vec embeddings not present. Downloading file (~1.5 GB) to {w2v_emb_path}...', end='')
+                self.logger.info(f'Word2Vec embeddings not present. Downloading file (~1.5 GB) to {w2v_emb_path}...', end='')
                 w2v_url = 'https://s3.amazonaws.com/dl4j-distribution/GoogleNews-vectors-negative300.bin.gz'
                 r = requests.get(w2v_url, allow_redirects=True)
                 open(w2v_emb_path, 'wb').write(r.content)
-                print('Done!')
-            print(f'Reading Word2Vec embeddings from {w2v_emb_path}')
+                self.logger.info('Done!')
+            self.logger.info(f'Reading Word2Vec embeddings from {w2v_emb_path}')
             w2v_model = KeyedVectors.load_word2vec_format(w2v_emb_path, binary=True)
             # A Gensim 4.0.0 special. Note that if Gensim 3.x is installed, the following will not work.
             # Due to the annoying KeyError, we have to change the function a tad...
@@ -220,7 +223,7 @@ class MTRFv4Res(Model):
             # Set any -1 gensim_IDs that are -1 to 0...
             full_embedding_matrix[gensim_IDs == -1] = 0
         else:
-            raise ValueError(f'Embedding source of {embedding_source} is invalid.')
+            self.logger.error(f'Embedding source of {embedding_source} is invalid.')
         # Now check to see if we need to keep OOV at 0 or we need to average the
         # ones we have...
         if oov_init == 'avg':
@@ -241,5 +244,5 @@ class MTRFv4Res(Model):
         return Embedding(input_dim=self.hp_set.word_vocab_count,
                          output_dim=self.hp_set.word_embedding_dimension,
                          embeddings_initializer=full_embedding_matrix,
-                         name=f'Word Embedding ({embedding_source}_{oov_init})',
+                         name=layer_name,
                          trainable=not self.hp_set.freeze_word_embeddings)
