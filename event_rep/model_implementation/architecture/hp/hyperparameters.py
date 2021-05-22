@@ -12,10 +12,11 @@ to the experiment directory, while the user can choose which architect values
 import json
 import os
 import pickle
+import logging
 
 
 class HyperparameterSet:
-    def __init__(self, output_dir, description_file, default_hp_file='default_params_all.json'):
+    def __init__(self, output_dir='./', default_hp_file='default_params_all.json'):
         """
         Initializer for the default hyperparameter set. The implementation shouldn't be changed
         unless hyperparameters are added. Anyone looking at the source code, do not pay attention
@@ -57,15 +58,45 @@ class HyperparameterSet:
         # Now read in the JSONs and use setattr to transfer values...
         with open('default_params_all.json', 'r') as f:
             params = json.load(f)
-            for paramName, value in params.items():
-                setattr(self, paramName, value)
+            update_object_params_dict(self, params)
+        # with open(description_file, 'rb') as f:
+        #     des = pickle.load(f)
+        #     for paramName, value in des.items():
+        #         if hasattr(self, paramName):
+        #             setattr(self, paramName, value)
+        self.word_vocab_count = 0
+        self.role_vocab_count = 0
+
+    def read_description_params(self, description_file):
+        """
+        We need a separate method to read the parameters from the description, because
+        this depends on what the user inputs for their dataset.
+        :param description_file: The path to the description file (non-json).
+        :return: Nothing, but sets all of the class variables
+        """
         with open(description_file, 'rb') as f:
             des = pickle.load(f)
-            for paramName, value in des.items():
-                if hasattr(self, paramName):
-                    setattr(self, paramName, value)
+            update_object_params_dict(self, des)
         self.word_vocab_count = len(self.word_vocabulary)
         self.role_vocab_count = len(self.role_vocabulary)
+
+    def set_output_dir(self, output_dir):
+        """
+        Sets the output directory on where to write the full hyperparameter JSON.
+        This can differ due to the overlying experiment name, which isn't known until
+        all the user parameters are read in.
+        :param output_dir:
+        :return:
+        """
+        self.output_dir = output_dir
+
+    def update_parameters(self, new_params: dict):
+        """
+        Updates the hyperparameters based on a new dictionary.
+        :param new_params:
+        :return:
+        """
+        update_object_params_dict(self, new_params)
 
     def write_hp(self, ignore_hp: list = None):
         """
@@ -80,3 +111,19 @@ class HyperparameterSet:
         attributes = [k for k in dir(self) if not k.startswith('_') and k not in full_ignore_list]
         with open(os.path.join(self.output_dir, 'hyperparameters.json'), 'w') as f:
             json.dump({k: getattr(self, k) for k in attributes}, fp=f, indent=2, separators=(',', ': '))
+
+
+def update_object_params_dict(obj, d: dict):
+    """
+    Function to prevent repeated code. Updates the object with
+    parameter and values from d.
+    :param obj: The object whose variables to update
+    :param d: The dictionary that contains the values. The keys translate to object attributes.
+    :return:
+    """
+    for paramName, value in d.items():
+        if hasattr(obj, paramName):
+            setattr(obj, paramName, value)
+        else:
+            logging.warn(f'{paramName} not in class variables. Please update class if variable is needed.'
+                         f'Skipping for now...')
