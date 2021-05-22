@@ -16,7 +16,7 @@ import logging
 
 
 class HyperparameterSet:
-    def __init__(self, output_dir='./', default_hp_file='default_params_all.json'):
+    def __init__(self, SRC_DIR, output_dir='./', default_hp_file='default_params_all.json'):
         """
         Initializer for the default hyperparameter set. The implementation shouldn't be changed
         unless hyperparameters are added. Anyone looking at the source code, do not pay attention
@@ -26,7 +26,7 @@ class HyperparameterSet:
         :param default_hp_file: The JSON that contains the default hyperparameters
         """
         self.output_dir = output_dir
-        self.default_hp_file = default_hp_file
+        self.default_hp_file = os.path.join(SRC_DIR, 'model_implementation/architecture/hp', default_hp_file)
         # META parameters. Make sure the name matches exactly with JSON keys,
         # as we'll be using setattr to transfer the values over.
         self.batch_size = 0
