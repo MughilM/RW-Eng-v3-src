@@ -12,6 +12,7 @@ top level also makes running everything easier.
 import argparse
 import os
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
+from model_implementation.core.roles import *
 
 # Directory locations
 # The absolute path where main is being run. Should end in RW-Eng-v3-src/event_rep
@@ -32,6 +33,8 @@ hp_set = HyperparameterSet(SRC_DIR)
 for directory in [EXPERIMENT_DIR, PRETRAINED_DIR, CSV_PIECE_PATH, DATA_PATH]:
     os.makedirs(directory, exist_ok=True)
 
+# This the role set we will be using...
+ROLE_SET = Roles2Args3Mods
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a thematic fit model')
@@ -101,6 +104,9 @@ if __name__ == '__main__':
                         help='If listed, then substitutes the average + noise for pretrained embedding vectors'
                              'where those words are not listed in our vocabulary. By default, substitutes them'
                              'with all 0 vectors.')
+    # Extra parameter, role set, generally not touched at all.
+    parser.add_argument('--role_set', type=Roles, default=Roles2Args3Mods,
+                        help='The role set to use. Default Roless2Args3Mods')
 
     opts = vars(parser.parse_args())
 
