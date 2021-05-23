@@ -11,8 +11,19 @@ top level also makes running everything easier.
 
 import argparse
 import os
+import sys
+import time
+import shutil
+from typing import Dict, Type
+import datetime
+
+import tensorflow as tf
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau, TerminateOnNaN
+
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
 from model_implementation.core.roles import *
+from model_implementation.architecture.models import *
+from model_implementation.core.batcher import WordRoleWriter
 
 # Directory locations
 # The absolute path where main is being run. Should end in RW-Eng-v3-src/event_rep
@@ -28,6 +39,12 @@ CSV_PIECE_PATH = os.path.join(SRC_DIR, 'csv_piece_output')
 DATA_PATH = os.path.join(SRC_DIR, 'processed_data')
 # Generate the huperparameter set from the SRC DIR
 hp_set = HyperparameterSet(SRC_DIR)
+# This is a dictionary which maps the user-provided parameter of the model to
+# the corresponding class
+# TODO: Add models here as necessary, as the argument enforcement is on the keys
+PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
+    'v4': MTRFv4Res
+}
 
 # Make the directories if they don't already exist.
 for directory in [EXPERIMENT_DIR, PRETRAINED_DIR, CSV_PIECE_PATH, DATA_PATH]:
@@ -41,15 +58,14 @@ if __name__ == '__main__':
     # Create the hyperparameter set, which sets all of our default parameters.
 
     # Required parameters
-    # TODO: Add models to choices
-    parser.add_argument('model_name', choices=['MTRFv4Res', 'MTRFv5Res', 'MTRFv6Res'],
+    parser.add_argument('model_name', choices=PARAM_TO_MODEL.keys(), type=str,
                         help='The naem of the model to train. Must be one of the model classes'
                              'defined in models.py')
     parser.add_argument('data_version', type=str,
                         help='The folder in the data directory that contains NN_train, NN_test, etc.')
 
     # Optional parameters
-    parser.add_argument('--experiment_name', type=str,
+    parser.add_argument('--experiment_name', type=str, default='',
                         help='The name of the experiment. ALl model artifacts get saved in a subdirectory of'
                              'this name. Will default to a concatenation of the time, model name, and data version.')
     parser.add_argument('--load_previous', dest='load_previous', action='store_true',
@@ -108,6 +124,102 @@ if __name__ == '__main__':
     parser.add_argument('--role_set', type=Roles, default=Roles2Args3Mods,
                         help='The role set to use. Default Roless2Args3Mods')
 
-    opts = vars(parser.parse_args())
+    args = parser.parse_args()
 
+    if args.experiment_name == '':
+        experiment_name = f"{time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())}_{args.model_name}_" \
+                          f"{args.data_version}"
+    else:
+        experiment_name = args.experiment_name
+    # Convert arguments into dictionary
+    opts = vars(args)
     print(opts)
+    # Pop the irrelevant attributes from the dictionary, and pass them to the hyperparameter
+    # set so the values get updated.
+    irrel_keys = ['model_name', 'data_version', 'role_set', 'experiment_name']
+    for key in irrel_keys:
+        if key in opts:
+            opts.pop(key)
+    hp_set.update_parameters(opts)
+
+    # Now that the parameters are updated, let's generate the dataset object we need
+    data_writer = WordRoleWriter(input_data_dir=os.path.join(DATA_PATH, args.data_version),
+                                 output_csv_path=CSV_PIECE_PATH,
+                                 batch_size=hp_set.batch_size,
+                                 MISSING_WORD_ID=hp_set.missing_word_id,
+                                 N_ROLES=hp_set.role_vocab_count)
+    data_writer.write_csv_pieces()
+    train_data = data_writer.get_tf_dataset('train')
+    vali_data = data_writer.get_tf_dataset('dev')
+    test_data = data_writer.get_tf_dataset('test')
+
+    # Make the model object!
+    model: Type[MTRFv4Res] = PARAM_TO_MODEL[args.model_name]
+    logging.info('Clean model summary:')
+    model.summary()
+
+
+    model_artifact_dir = os.path.join(EXPERIMENT_DIR, experiment_name)
+    checkpoint_dir = os.path.join(EXPERIMENT_DIR, experiment_name, 'checkpoints')
+    if os.path.exists(model_artifact_dir):
+        if args.load_previous:
+            logging.info(f'Attempting to continue train from a checkpoint at {checkpoint_dir}...')
+            if not os.path.exists(checkpoint_dir):
+                logging.error('No checkpoints present! Quitting...')
+                sys.exit(1)
+            # TODO: Add reading from a description/metrics file...
+            latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
+            logging.info(f'Found latest checkpoint {latest_checkpoint}! Loading weights...')
+            model.load_weights(latest_checkpoint)
+            initial_epoch = 0
+        # If the path exists, but we are not loading the previous,
+        # then delete whatever is there...
+        else:
+            shutil.rmtree(model_artifact_dir)
+            os.makedirs(model_artifact_dir, exist_ok=True)
+            existing_description = None
+            initial_epoch = 0
+
+    # Make callbacks...
+    checkpointer = ModelCheckpoint(filepath=os.path.join(checkpoint_dir, 'cp_{epoch:03d}.ckpt'),
+                                   monitor='val_loss',
+                                   save_best_only=True,
+                                   verbose=0,
+                                   save_weights_only=True)
+    stopper = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=2, verbose=1)
+    nanChecker = TerminateOnNaN()
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=2, min_lr=1e-3)
+    # TODO: Add description/metric callback
+
+    start_time = datetime.datetime.now(datetime.timezone.utc)
+    logging.info(f'TRAINING STARTED AT {start_time} UTC...')
+
+    # FIT OUR MODEL!
+    model.fit(train_data,
+              epochs=initial_epoch + args.epochs,
+              workers=1,
+              verbose=1,
+              initial_epoch=initial_epoch,
+              validation_data=vali_data,
+              callbacks=[checkpointer, stopper, nanChecker, reduce_lr])
+
+    # Report time taken, and metrics on the testing dataset...
+    end_time = datetime.datetime.now(datetime.timezone.utc)
+    print(f'TRAINING ENDED AT {end_time} UTC...')
+
+    # For testing, we need to load the latest checkpoint,
+    latest = tf.train.latest_checkpoint(checkpoint_dir)
+    print(f'Testing with latest checkpoint: {latest}')
+    model.model.load_weights(latest)
+    model.model.evaluate(test_data, workers=1)
+
+    saved_model_dir = os.path.join(EXPERIMENT_DIR, experiment_name, 'model')
+    print(f'Saving model in SavedModel format at {saved_model_dir}...')
+    model.model.save(saved_model_dir)
+    print('Done!')
+
+    print(f'EXPERIMENT SAVED AT {model_artifact_dir}.')
+
+    end_time = datetime.datetime.now(datetime.timezone.utc)
+    print(f'PROGRAM ENDED AT {end_time} UTC...')
+    print(f'TOTAL TIME: {str(end_time - start_time)}')
