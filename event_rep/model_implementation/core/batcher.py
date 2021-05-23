@@ -175,10 +175,10 @@ class WordRoleWriter:
         # They need to match the input and output layer names of the
         # model we are running.
         return (
-            {'Input Roles': role_input,
-             'Input Words': word_input,
-             'Target Role': target_role_input,
-             'Target Word': target_word_input},
-            {'Role Output': role_target_output,
-             'Word Output': word_target_output}
+            {'input_roles': role_input,
+             'input_words': word_input,
+             'target_role': target_role_input,
+             'target_word': target_word_input},
+            {'role_output': role_target_output,
+             'word_output': word_target_output}
         )

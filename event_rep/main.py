@@ -10,20 +10,18 @@ top level also makes running everything easier.
 """
 
 import argparse
-import os
+import datetime
+import os.path
+import shutil
 import sys
 import time
-import shutil
 from typing import Dict, Type
-import datetime
 
-import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau, TerminateOnNaN
 
-from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
-from model_implementation.core.roles import *
 from model_implementation.architecture.models import *
 from model_implementation.core.batcher import WordRoleWriter
+from model_implementation.core.roles import *
 
 # Directory locations
 # The absolute path where main is being run. Should end in RW-Eng-v3-src/event_rep
@@ -75,7 +73,7 @@ if __name__ == '__main__':
     parser.add_argument('--dropout_rate', type=float, default=hp_set.dropout_rate,
                         help='The dropout rate for the Dropout layers. Should be between 0 and 1.')
     parser.add_argument('--embedding_type', choices=['random', 'spacy_0', 'spacy_avg', 'fasttext_0',
-                                                     'fasttext_avg', 'w2v_0', 'w2v_avg'],
+                                                     'fasttext_avg', 'w2v_0', 'w2v_avg'], default='random',
                         help='The type of embedding to use for WORDS. Can be random, or a type of'
                              'pretrained embedding (spaCy, Fasttext, Word2Vec) along with an OOV initialization'
                              '(one of 0 or avg)')
@@ -133,17 +131,22 @@ if __name__ == '__main__':
         experiment_name = args.experiment_name
     # Convert arguments into dictionary
     opts = vars(args)
-    print(opts)
     # Pop the irrelevant attributes from the dictionary, and pass them to the hyperparameter
-    # set so the values get updated.
-    irrel_keys = ['model_name', 'data_version', 'role_set', 'experiment_name']
+    # set so the values get updated. HOWEVER, THIS ALSO REMOVES THEM FROM THE
+    # NAMESPACE, SO SAVE THE MODEL NAEM AND DATA VERSION.
+    model_name = args.model_name
+    data_version = args.data_version
+    load_previous = args.load_previous
+    irrel_keys = ['model_name', 'data_version', 'role_set', 'experiment_name', 'load_previous']
     for key in irrel_keys:
         if key in opts:
             opts.pop(key)
     hp_set.update_parameters(opts)
+    # Next, we also need to read in the description file from the input data directory
+    hp_set.read_description_params(os.path.join(DATA_PATH, data_version, 'description'))
 
     # Now that the parameters are updated, let's generate the dataset object we need
-    data_writer = WordRoleWriter(input_data_dir=os.path.join(DATA_PATH, args.data_version),
+    data_writer = WordRoleWriter(input_data_dir=os.path.join(DATA_PATH, data_version),
                                  output_csv_path=CSV_PIECE_PATH,
                                  batch_size=hp_set.batch_size,
                                  MISSING_WORD_ID=hp_set.missing_word_id,
@@ -153,14 +156,24 @@ if __name__ == '__main__':
     vali_data = data_writer.get_tf_dataset('dev')
     test_data = data_writer.get_tf_dataset('test')
 
-    # Make the model object!
-    model: Type[MTRFv4Res] = PARAM_TO_MODEL[args.model_name]
-    logging.info('Clean model summary:')
-    model.summary()
+    for data in train_data.take(1):
+        print(data)
 
+    # Make the model object!
+    input_words = Input(shape=(hp_set.role_vocab_count - 1), dtype=tf.uint32, name='Input Words')
+    input_roles = Input(shape=(hp_set.role_vocab_count - 1), dtype=tf.uint32, name='Input Roles')
+    target_word = Input(shape=(1,), dtype=tf.uint32, name='Target Word')
+    target_role = Input(shape=(1,), dtype=tf.uint32, name='Target Role')
+    target_word_output = Dense(hp_set.word_vocab_count, activation='softmax', name='Word Output')
+    target_role_output = Dense(hp_set.role_vocab_count, activation='softmax', name='Role Output')
+    model: MTRFv4Res = PARAM_TO_MODEL[model_name](hp_set)
+    logging.info('Clean model summary:')
+    model.build(()).summary()
+    tf.keras.utils.plot_model(model.build(()), show_shapes=True)
 
     model_artifact_dir = os.path.join(EXPERIMENT_DIR, experiment_name)
     checkpoint_dir = os.path.join(EXPERIMENT_DIR, experiment_name, 'checkpoints')
+    initial_epoch = 0
     if os.path.exists(model_artifact_dir):
         if args.load_previous:
             logging.info(f'Attempting to continue train from a checkpoint at {checkpoint_dir}...')
@@ -194,7 +207,9 @@ if __name__ == '__main__':
     start_time = datetime.datetime.now(datetime.timezone.utc)
     logging.info(f'TRAINING STARTED AT {start_time} UTC...')
 
-    # FIT OUR MODEL!
+    # COMPILE AND FIT OUR MODEL!
+    model.compile(optimizer='adagrad', loss='sparse_categorical_crossentropy', metrics=['accuracy'],
+                  loss_weights=[1.] + [hp_set.loss_weight_role])
     model.fit(train_data,
               epochs=initial_epoch + args.epochs,
               workers=1,
@@ -210,15 +225,19 @@ if __name__ == '__main__':
     # For testing, we need to load the latest checkpoint,
     latest = tf.train.latest_checkpoint(checkpoint_dir)
     print(f'Testing with latest checkpoint: {latest}')
-    model.model.load_weights(latest)
-    model.model.evaluate(test_data, workers=1)
+    model.load_weights(latest)
+    model.evaluate(test_data, workers=1)
 
     saved_model_dir = os.path.join(EXPERIMENT_DIR, experiment_name, 'model')
     print(f'Saving model in SavedModel format at {saved_model_dir}...')
-    model.model.save(saved_model_dir)
+    model.save(saved_model_dir)
     print('Done!')
 
     print(f'EXPERIMENT SAVED AT {model_artifact_dir}.')
+    # Update the output directory for our hyperparameters,
+    # and write the JSON to the model output directory.
+    hp_set.output_dir = model_artifact_dir
+    hp_set.write_hp()
 
     end_time = datetime.datetime.now(datetime.timezone.utc)
     print(f'PROGRAM ENDED AT {end_time} UTC...')

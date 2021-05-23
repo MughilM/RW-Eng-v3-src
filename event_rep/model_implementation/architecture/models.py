@@ -28,81 +28,82 @@ import logging
 
 
 class MTRFv4Res(Model):
-    def __init__(self, hp_set: HyperparameterSet, pretrained_emb_dir=None):
-        super(MTRFv4Res, self).__init__()
+    def __init__(self, hp_set: HyperparameterSet, pretrained_emb_dir=None, **kwargs):
+        super(MTRFv4Res, self).__init__(**kwargs)
         self.hp_set = hp_set
         self.PRETRAINED_DIR = pretrained_emb_dir
         self.logger = logging.getLogger(__name__)
-        # Set up the 4 inputs necessary...
-        self.input_words = Input(shape=(self.hp_set.role_vocab_count - 1), dtype=tf.uint32, name='Input Words')
-        self.input_roles = Input(shape=(self.hp_set.role_vocab_count - 1), dtype=tf.uint32, name='Input Roles')
-        self.target_word = Input(shape=(1,), dtype=tf.uint32, name='Target Word')
-        self.target_role = Input(shape=(1,), dtype=tf.uint32, name='Target Role')
+        # Input layers, ONLY USED IN build().
+        self.input_words = Input(shape=(self.hp_set.role_vocab_count - 1), dtype=tf.uint32, name='input_words')
+        self.input_roles = Input(shape=(self.hp_set.role_vocab_count - 1), dtype=tf.uint32, name='input_roles')
+        self.target_word = Input(shape=(1,), dtype=tf.uint32, name='target_word')
+        self.target_role = Input(shape=(1,), dtype=tf.uint32, name='target_role')
         # Add the embedding layers for the input words and roles
         self.word_embedding = self.get_embedding()
         self.role_embedding = Embedding(input_dim=self.hp_set.role_vocab_count,
                                         output_dim=self.hp_set.role_embedding_dimension,
-                                        embeddings_initializer=glorot_uniform(), name='Role Embedding',
+                                        embeddings_initializer=glorot_uniform(), name='role_embedding',
                                         trainable=not self.hp_set.freeze_role_embeddings)
         # Make a mask for the embedding to zero out the embedding values
         # for where the word is missing. This is the cleanest solution for
         # right now, but open to more elegant solutions in the future...
         self.embedding_mask = Lambda(lambda x: tf.cast(
             tf.expand_dims(
-                tf.not_equal(x, self.hp_set.missing_word_id, name='Missing Word Reverse Mask'),
-                axis=-1, name='Expand'),
-            dtype=tf.float32, name='Cast to Float'), name='Create Mask for Missing Words')
+                tf.not_equal(x, self.hp_set.missing_word_id, name='missing_word_reverse_mask'),
+                axis=-1, name='expand'),
+            dtype=tf.float32, name='cast_to_float'), name='create_mask_for_missing_words')
 
-        self.word_embed_multi = Multiply(name='Apply Mask to Word')
-        self.role_embed_multi = Multiply(name='Apply Mask to Role')
+        self.word_embed_multi = Multiply(name='apply_mask_to_word')
+        self.role_embed_multi = Multiply(name='apply_mask_to_role')
         # Dropout layers for both word and role
         self.word_dropout = Dropout(self.hp_set.dropout_rate)
         self.role_dropout = Dropout(self.hp_set.dropout_rate)
-        # Concatenation of embeddings layer
-        self.embedding_concat = Concatenate(name='Combine Embeddings')
+        # Multiplication of embeddings layer
+        self.embedding_multiply = Multiply(name='multiply_embeddings')
         # Next, is the residual block, which takes the combined embeddings and
         # adds it to a PReLU forwarded version of itself
         self.lin_proj1 = Dense(self.hp_set.word_embedding_dimension, activation='linear',
-                               use_bias=False, name='Linear Proj 1')
-        self.prelu = PReLU(alpha_initializer='ones', name='PReLU')
+                               use_bias=False, name='linear_proj_1')
+        self.prelu = PReLU(alpha_initializer='ones', name='prelu')
         self.lin_proj2 = Dense(self.hp_set.word_embedding_dimension, activation='linear',
-                               use_bias=False, name='Linear Proj 2')
-        self.prelu_proj_add = Add(name='Residual')
-        self.average_across_input = Lambda(lambda x: tf.reduce_mean(x, axis=1), name='Context Embedding')
+                               use_bias=False, name='linear_proj_2')
+        self.prelu_proj_add = Add(name='residual')
+        self.average_across_input = Lambda(lambda x: tf.reduce_mean(x, axis=1), name='context_embedding')
         # Finally we need to produce the embeddings for the target role and word...
         # Our target word and role will be (batch_size, 1, 512)...
         # Note that embeddings cross as inputs into the other target e.g.
         # the target word embedding inputs to the ROLE and vice versa.
         self.target_word_embedding = Embedding(self.hp_set.word_vocab_count, self.hp_set.n_factors_cls,
                                                embeddings_initializer=glorot_uniform(),
-                                               name='Target Word Embedding')
+                                               name='target_word_embedding')
         self.target_role_embedding = Embedding(self.hp_set.role_vocab_count, self.hp_set.n_factors_cls,
                                                embeddings_initializer=glorot_uniform(),
-                                               name='Target Role Embedding')
+                                               name='target_role_embedding')
         # Create two dropout layers for both, and a reshape layer as there is an extra dimension.
-        self.target_word_drop = Dropout(self.hp_set.dropout_rate, name='Target Word Dropout')
-        self.target_role_drop = Dropout(self.hp_set.dropout_rate, name='Target Role Dropout')
-        self.target_word_reshape = Reshape((self.hp_set.n_factors_cls,), name='Reshape Target Word Embedding')
-        self.target_role_reshape = Reshape((self.hp_set.n_factors_cls,), name='Reshape Target Role Embedding')
+        self.target_word_drop = Dropout(self.hp_set.dropout_rate, name='target_word_dropout')
+        self.target_role_drop = Dropout(self.hp_set.dropout_rate, name='target_role_dropout')
+        self.target_word_reshape = Reshape((self.hp_set.n_factors_cls,), name='reshape_target_word_embedding')
+        self.target_role_reshape = Reshape((self.hp_set.n_factors_cls,), name='reshape_target_role_embedding')
         # Create two weighted context embeddings that will pass into each target embedding
         self.weight_context_word = Dense(self.hp_set.n_factors_cls, activation='linear', use_bias=False,
-                                         name='Weighted Context 1')
+                                         name='weighted_context_1')
         self.weight_context_role = Dense(self.hp_set.n_factors_cls, activation='linear', use_bias=False,
-                                         name='Weighted Context 2')
+                                         name='weighted_context_2')
         # Create two Multiply layers for when we multiply the weighted context with the embeddings...
         # Remember to cross! These will be enforced during call.
-        self.target_word_hidden = Multiply(name='Cont * TRE')  # target ROLE embedding for target word hidden
-        self.target_role_hidden = Multiply(name='Cont * TWE')  # target WORD embedding for target role hidden
+        self.target_word_hidden = Multiply(name='cont_x_tre')  # target ROLE embedding for target word hidden
+        self.target_role_hidden = Multiply(name='cont_x_twe')  # target WORD embedding for target role hidden
 
         ### FINALLY THE OUTPUTS
-        self.target_word_output = Dense(self.hp_set.word_vocab_count, activation='softmax', name='Word Output')
-        self.target_role_output = Dense(self.hp_set.role_vocab_count, activation='softmax', name='Role Output')
+        self.target_word_output = Dense(self.hp_set.word_vocab_count, activation='softmax', name='word_output')
+        self.target_role_output = Dense(self.hp_set.role_vocab_count, activation='softmax', name='role_output')
 
     def call(self, inputs, training=None, mask=None):
         # WE ASSUME THAT THE INPUTS ARE ORDERED LIKE SO:
         # [input_words, input_roles, target_word, target_role]
         # Though of course, when the Model is defined and data is fed through, it is much easier
         # to simply provide a tf.dataset where the input layer names map properly...
+        print(inputs)
         input_words, input_roles, target_word, target_role = tuple(inputs)
         # Pass inputs through embedding...
         word_embedding_out = self.word_embedding(input_words)
@@ -118,7 +119,7 @@ class MTRFv4Res(Model):
         word_embedding_out = self.word_dropout(word_embedding_out)
         role_embedding_out = self.role_dropout(role_embedding_out)
         # Concatenate the two embeddings
-        total_embeddings = self.embedding_concat([word_embedding_out, role_embedding_out])
+        total_embeddings = self.embedding_multiply([word_embedding_out, role_embedding_out])
         # Pass the total embeddings through the residual block next
         residual = self.prelu_proj_add([
             total_embeddings,
@@ -140,6 +141,10 @@ class MTRFv4Res(Model):
         tr_out = self.target_role_output(trh_out)
         return tw_out, tr_out
 
+    def build(self, input_shapes):
+        input_list = [self.input_words, self.input_roles, self.target_word, self.target_role]
+        return Model(inputs=input_list, outputs=self.call(input_list))
+
     def get_embedding(self):
         """
         Method that gets the correct embedding, depending on what sort of embedding is chosen.
@@ -152,12 +157,12 @@ class MTRFv4Res(Model):
         if self.hp_set.embedding_type == 'random':
             return Embedding(input_dim=self.hp_set.word_vocab_count,
                              output_dim=self.hp_set.word_embedding_dimension,
-                             embeddings_initializer=glorot_uniform(), name='Word Embedding (Random)',
+                             embeddings_initializer=glorot_uniform(), name='word_embedding_random',
                              trainable=not self.hp_set.freeze_word_embeddings)
         # Otherwise we are looking at one of 3 embeddings, and one of 2 initilaizers
         # for OOV...
         embedding_source, oov_init = tuple(self.hp_set.embedding_type.split('_'))
-        layer_name = f'Word Embedding ({embedding_source}-{oov_init})'
+        layer_name = f'word_embedding_{embedding_source}_{oov_init}'
         # We essentially want to merge a blank embedding matrix with whatever
         # words we have in teh pretrained embedding model, and either leave the missing
         # word alone or impute them with the average embedding (plus some noise)
