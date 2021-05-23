@@ -103,8 +103,9 @@ class MTRFv4Res(Model):
         # [input_words, input_roles, target_word, target_role]
         # Though of course, when the Model is defined and data is fed through, it is much easier
         # to simply provide a tf.dataset where the input layer names map properly...
-        print(inputs)
-        input_words, input_roles, target_word, target_role = tuple(inputs)
+        # input_words, input_roles, target_word, target_role = inputs[0], inputs[1], inputs[2], inputs[3]
+        input_words, input_roles, target_word, target_role = inputs['input_words'], inputs['input_roles'], \
+                                                             inputs['target_word'], inputs['target_role']
         # Pass inputs through embedding...
         word_embedding_out = self.word_embedding(input_words)
         role_embedding_out = self.role_embedding(input_roles)
@@ -139,10 +140,21 @@ class MTRFv4Res(Model):
         # Forward through the output layers and we are done!
         tw_out = self.target_word_output(twh_out)
         tr_out = self.target_role_output(trh_out)
-        return tw_out, tr_out
+        return {'word_output': tw_out, 'role_output': tr_out}
 
-    def build(self, input_shapes):
-        input_list = [self.input_words, self.input_roles, self.target_word, self.target_role]
+    def build(self, input_shapes=None):
+        """
+        This differs from the normal build because input_shapes is not required,
+        since the class defines the input layers in-house. But the parameter has
+        to stay, otherwise model.fit, evaluate, etc. would cause errors.
+        :param input_shapes: The input_shapes. NOT USED, but used by model.fit() during training,
+        so removing would cause errors.
+        :return: Model object with inputs and outputs defined.
+        """
+        input_list = {'input_words': self.input_words,
+                      'input_roles': self.input_roles,
+                      'target_word': self.target_word,
+                      'target_role': self.target_role}
         return Model(inputs=input_list, outputs=self.call(input_list))
 
     def get_embedding(self):

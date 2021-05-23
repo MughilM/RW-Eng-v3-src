@@ -156,20 +156,13 @@ if __name__ == '__main__':
     vali_data = data_writer.get_tf_dataset('dev')
     test_data = data_writer.get_tf_dataset('test')
 
-    for data in train_data.take(1):
-        print(data)
 
     # Make the model object!
-    input_words = Input(shape=(hp_set.role_vocab_count - 1), dtype=tf.uint32, name='Input Words')
-    input_roles = Input(shape=(hp_set.role_vocab_count - 1), dtype=tf.uint32, name='Input Roles')
-    target_word = Input(shape=(1,), dtype=tf.uint32, name='Target Word')
-    target_role = Input(shape=(1,), dtype=tf.uint32, name='Target Role')
-    target_word_output = Dense(hp_set.word_vocab_count, activation='softmax', name='Word Output')
-    target_role_output = Dense(hp_set.role_vocab_count, activation='softmax', name='Role Output')
     model: MTRFv4Res = PARAM_TO_MODEL[model_name](hp_set)
     logging.info('Clean model summary:')
-    model.build(()).summary()
-    tf.keras.utils.plot_model(model.build(()), show_shapes=True)
+    # Extra parentheses for build() because input_shapes are not required.
+    model.build().summary()
+    tf.keras.utils.plot_model(model.build(), show_shapes=True)
 
     model_artifact_dir = os.path.join(EXPERIMENT_DIR, experiment_name)
     checkpoint_dir = os.path.join(EXPERIMENT_DIR, experiment_name, 'checkpoints')
