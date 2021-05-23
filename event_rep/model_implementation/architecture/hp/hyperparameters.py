@@ -58,7 +58,7 @@ class HyperparameterSet:
         self.word_vocabulary = {}
         self.role_vocabulary = {}
         # Now read in the JSONs and use setattr to transfer values...
-        with open('default_params_all.json', 'r') as f:
+        with open(self.default_hp_file, 'r') as f:
             params = json.load(f)
             update_object_params_dict(self, params)
         # with open(description_file, 'rb') as f:

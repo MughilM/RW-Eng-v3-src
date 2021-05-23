@@ -141,3 +141,6 @@ event_rep/pretrained_embeddings
 
 # Ignore the directory with CSV pieces
 event_rep/csv_piece_output
+
+# Ignore dataset folder
+event_rep/processed_data
