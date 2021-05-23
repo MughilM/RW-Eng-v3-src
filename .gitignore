@@ -130,3 +130,14 @@ dmypy.json
 
 # Jetbrains
 .idea/
+
+# Experiment folder, ignore the checkpoints, but don't ignore the hyperparameters
+!event_rep/experiments/*
+event_rep/experiments/*/*
+!event_rep/experiments/*/hyperparameters.json
+
+# Ignore the pretrained embeddings, as those contain large embeddings
+event_rep/pretrained_embeddings
+
+# Ignore the directory with CSV pieces
+event_rep/csv_piece_output
