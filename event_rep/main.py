@@ -51,17 +51,99 @@ for directory in [EXPERIMENT_DIR, PRETRAINED_DIR, CSV_PIECE_PATH, DATA_PATH]:
 # This the role set we will be using...
 ROLE_SET = Roles2Args3Mods
 
-def create_model():
+# Start the clock, this allows all the methods to access
+# the time...
+total_time_start = datetime.datetime.now(datetime.timezone.utc)
+
+
+def create_dataset_objects(data_ver):
+    data_writer = WordRoleWriter(input_data_dir=os.path.join(DATA_PATH, data_ver),
+                                 output_csv_path=CSV_PIECE_PATH,
+                                 batch_size=hp_set.batch_size,
+                                 MISSING_WORD_ID=hp_set.missing_word_id,
+                                 N_ROLES=hp_set.role_vocab_count)
+    data_writer.write_csv_pieces()
+    train_data = data_writer.get_tf_dataset('train')
+    vali_data = data_writer.get_tf_dataset('dev')
+    test_data = data_writer.get_tf_dataset('test')
+
+    return train_data, vali_data, test_data
+
+def train_test_eval(train_dataset: tf.data.Dataset,
+                    vali_dataset: tf.data.Dataset,
+                    test_dataset: tf.data.Dataset):
+    # Make the model object!
+    model: MTRFv4Res = PARAM_TO_MODEL[model_name](hp_set)
+    logging.info('Clean model summary:')
+    # Extra parentheses for build() because input_shapes are not required.
+    model.build().summary()
+    tf.keras.utils.plot_model(model.build(), show_shapes=True)
+
+    model_artifact_dir = os.path.join(EXPERIMENT_DIR, experiment_name)
+    checkpoint_dir = os.path.join(EXPERIMENT_DIR, experiment_name, 'checkpoints')
+    initial_epoch = 0
+    if os.path.exists(model_artifact_dir):
+        if args.load_previous:
+            logging.info(f'Attempting to continue train from a checkpoint at {checkpoint_dir}...')
+            if not os.path.exists(checkpoint_dir):
+                logging.error('No checkpoints present! Quitting...')
+                sys.exit(1)
+            # TODO: Add reading from a description/metrics file...
+            latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
+            logging.info(f'Found latest checkpoint {latest_checkpoint}! Loading weights...')
+            model.load_weights(latest_checkpoint)
+            initial_epoch = 0
+        # If the path exists, but we are not loading the previous,
+        # then delete whatever is there...
+        else:
+            shutil.rmtree(model_artifact_dir)
+            os.makedirs(model_artifact_dir, exist_ok=True)
+            existing_description = None
+            initial_epoch = 0
+
+    # Make callbacks...
+    checkpointer = ModelCheckpoint(filepath=os.path.join(checkpoint_dir, 'cp_{epoch:03d}.ckpt'),
+                                   monitor='val_loss',
+                                   save_best_only=True,
+                                   verbose=0,
+                                   save_weights_only=True)
+    stopper = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=2, verbose=1)
+    nanChecker = TerminateOnNaN()
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=2, min_lr=1e-3)
+    # TODO: Add description/metric callback
+
+    total_time_start = datetime.datetime.now(datetime.timezone.utc)
+    logging.info(f'TRAINING STARTED AT {total_time_start} UTC...')
+
+    # COMPILE AND FIT OUR MODEL!
+    model.compile(optimizer='adagrad', loss='sparse_categorical_crossentropy', metrics=['accuracy'],
+                  loss_weights=[1.] + [hp_set.loss_weight_role])
+    model.fit(train_dataset,
+              epochs=initial_epoch + args.epochs,
+              workers=1,
+              verbose=1,
+              initial_epoch=initial_epoch,
+              validation_data=vali_dataset,
+              callbacks=[checkpointer, stopper, nanChecker, reduce_lr])
+
+    # Report time taken, and metrics on the testing dataset...
+    end_time = datetime.datetime.now(datetime.timezone.utc)
+    print(f'TRAINING ENDED AT {end_time} UTC...')
+
+    # For testing, we need to load the latest checkpoint,
+    latest = tf.train.latest_checkpoint(checkpoint_dir)
+    print(f'Testing with latest checkpoint: {latest}')
+    model.load_weights(latest)
+    model.evaluate(test_dataset, workers=1)
+    print('Testing done. To resume training, please use the checkpoint directory.')
+    print(f'EXPERIMENT SAVED AT {model_artifact_dir}.')
+
+    return model, model_artifact_dir
+
+
+def run_thematic_evaluation(tasks: list):
     pass
 
-def train_test_eval():
-    pass
-
-def run_thematic_evaluation():
-    pass
-
-def save_model_artifacts():
-    pass
 
 
 if __name__ == '__main__':
@@ -134,6 +216,9 @@ if __name__ == '__main__':
     # Extra parameter, role set, generally not touched at all.
     parser.add_argument('--role_set', type=Roles, default=Roles2Args3Mods,
                         help='The role set to use. Default Roless2Args3Mods')
+    # TODO: Add the names of the other evaluation tasks for picking and choosing.
+    parser.add_argument('--evaluation_tasks', choices=['all', 'none'], default='none',
+                        help='The evaluation tasks to run. Default none. ')
 
     args = parser.parse_args()
 
@@ -158,85 +243,10 @@ if __name__ == '__main__':
     # Next, we also need to read in the description file from the input data directory
     hp_set.read_description_params(os.path.join(DATA_PATH, data_version, 'description'))
 
-    # Now that the parameters are updated, let's generate the dataset object we need
-    data_writer = WordRoleWriter(input_data_dir=os.path.join(DATA_PATH, data_version),
-                                 output_csv_path=CSV_PIECE_PATH,
-                                 batch_size=hp_set.batch_size,
-                                 MISSING_WORD_ID=hp_set.missing_word_id,
-                                 N_ROLES=hp_set.role_vocab_count)
-    data_writer.write_csv_pieces()
-    train_data = data_writer.get_tf_dataset('train')
-    vali_data = data_writer.get_tf_dataset('dev')
-    test_data = data_writer.get_tf_dataset('test')
+    train, vali, test = create_dataset_objects(data_version)
 
+    model, model_artifact_dir = train_test_eval(train, vali, test)
 
-    # Make the model object!
-    model: MTRFv4Res = PARAM_TO_MODEL[model_name](hp_set)
-    logging.info('Clean model summary:')
-    # Extra parentheses for build() because input_shapes are not required.
-    model.build().summary()
-    tf.keras.utils.plot_model(model.build(), show_shapes=True)
-
-    model_artifact_dir = os.path.join(EXPERIMENT_DIR, experiment_name)
-    checkpoint_dir = os.path.join(EXPERIMENT_DIR, experiment_name, 'checkpoints')
-    initial_epoch = 0
-    if os.path.exists(model_artifact_dir):
-        if args.load_previous:
-            logging.info(f'Attempting to continue train from a checkpoint at {checkpoint_dir}...')
-            if not os.path.exists(checkpoint_dir):
-                logging.error('No checkpoints present! Quitting...')
-                sys.exit(1)
-            # TODO: Add reading from a description/metrics file...
-            latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
-            logging.info(f'Found latest checkpoint {latest_checkpoint}! Loading weights...')
-            model.load_weights(latest_checkpoint)
-            initial_epoch = 0
-        # If the path exists, but we are not loading the previous,
-        # then delete whatever is there...
-        else:
-            shutil.rmtree(model_artifact_dir)
-            os.makedirs(model_artifact_dir, exist_ok=True)
-            existing_description = None
-            initial_epoch = 0
-
-    # Make callbacks...
-    checkpointer = ModelCheckpoint(filepath=os.path.join(checkpoint_dir, 'cp_{epoch:03d}.ckpt'),
-                                   monitor='val_loss',
-                                   save_best_only=True,
-                                   verbose=0,
-                                   save_weights_only=True)
-    stopper = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=2, verbose=1)
-    nanChecker = TerminateOnNaN()
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=2, min_lr=1e-3)
-    # TODO: Add description/metric callback
-
-    start_time = datetime.datetime.now(datetime.timezone.utc)
-    logging.info(f'TRAINING STARTED AT {start_time} UTC...')
-
-    # COMPILE AND FIT OUR MODEL!
-    model.compile(optimizer='adagrad', loss='sparse_categorical_crossentropy', metrics=['accuracy'],
-                  loss_weights=[1.] + [hp_set.loss_weight_role])
-    model.fit(train_data,
-              epochs=initial_epoch + args.epochs,
-              workers=1,
-              verbose=1,
-              initial_epoch=initial_epoch,
-              validation_data=vali_data,
-              callbacks=[checkpointer, stopper, nanChecker, reduce_lr])
-
-    # Report time taken, and metrics on the testing dataset...
-    end_time = datetime.datetime.now(datetime.timezone.utc)
-    print(f'TRAINING ENDED AT {end_time} UTC...')
-
-    # For testing, we need to load the latest checkpoint,
-    latest = tf.train.latest_checkpoint(checkpoint_dir)
-    print(f'Testing with latest checkpoint: {latest}')
-    model.load_weights(latest)
-    model.evaluate(test_data, workers=1)
-
-    print('Testing done. To resume training, please use the checkpoint directory.')
-
-    print(f'EXPERIMENT SAVED AT {model_artifact_dir}.')
     # Update the output directory for our hyperparameters,
     # and write the JSON to the model output directory.
     hp_set.output_dir = model_artifact_dir
@@ -244,4 +254,4 @@ if __name__ == '__main__':
 
     end_time = datetime.datetime.now(datetime.timezone.utc)
     print(f'PROGRAM ENDED AT {end_time} UTC...')
-    print(f'TOTAL TIME: {str(end_time - start_time)}')
+    print(f'TOTAL TIME: {str(end_time - total_time_start)}')
