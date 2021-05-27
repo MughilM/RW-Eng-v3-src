@@ -116,7 +116,8 @@ class HyperparameterSet:
         # so exclude those...
         if ignore_hp is None:
             ignore_hp = []
-        full_ignore_list = ['output_dir', 'default_hp_file', 'write_hp'] + ignore_hp
+        full_ignore_list = ['output_dir', 'default_hp_file', 'write_hp',
+                            'set_output_dir', 'update_parameters', 'read_description_params'] + ignore_hp
         attributes = [k for k in dir(self) if not k.startswith('_') and k not in full_ignore_list]
         with open(os.path.join(self.output_dir, 'hyperparameters.json'), 'w') as f:
             json.dump({k: getattr(self, k) for k in attributes}, fp=f, indent=2, separators=(',', ': '))

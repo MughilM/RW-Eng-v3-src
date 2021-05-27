@@ -221,10 +221,7 @@ if __name__ == '__main__':
     model.load_weights(latest)
     model.evaluate(test_data, workers=1)
 
-    saved_model_dir = os.path.join(EXPERIMENT_DIR, experiment_name, 'model')
-    print(f'Saving model in SavedModel format at {saved_model_dir}...')
-    model.save(saved_model_dir)
-    print('Done!')
+    print('Testing done. To resume training, please use the checkpoint directory.')
 
     print(f'EXPERIMENT SAVED AT {model_artifact_dir}.')
     # Update the output directory for our hyperparameters,
