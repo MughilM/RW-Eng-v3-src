@@ -51,6 +51,19 @@ for directory in [EXPERIMENT_DIR, PRETRAINED_DIR, CSV_PIECE_PATH, DATA_PATH]:
 # This the role set we will be using...
 ROLE_SET = Roles2Args3Mods
 
+def create_model():
+    pass
+
+def train_test_eval():
+    pass
+
+def run_thematic_evaluation():
+    pass
+
+def save_model_artifacts():
+    pass
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a thematic fit model')
     # Create the hyperparameter set, which sets all of our default parameters.
