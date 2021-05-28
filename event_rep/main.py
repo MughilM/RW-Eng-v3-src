@@ -11,6 +11,7 @@ top level also makes running everything easier.
 
 import argparse
 import datetime
+import json
 import os.path
 import shutil
 import sys
@@ -22,6 +23,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLRO
 from model_implementation.architecture.models import *
 from model_implementation.core.batcher import WordRoleWriter
 from model_implementation.core.roles import *
+from model_implementation.core.callbacks import MetricCallback
 
 # Directory locations
 # The absolute path where main is being run. Should end in RW-Eng-v3-src/event_rep
@@ -92,13 +94,15 @@ def train_test_eval(train_dataset: tf.data.Dataset,
             latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
             logging.info(f'Found latest checkpoint {latest_checkpoint}! Loading weights...')
             model.load_weights(latest_checkpoint)
-            initial_epoch = 0
+            with open(os.path.join(model_artifact_dir, 'metrics.json'), 'r') as f:
+                past_metrics = json.load(f)
+            initial_epoch = past_metrics['total_epochs'] + 1
         # If the path exists, but we are not loading the previous,
         # then delete whatever is there...
         else:
             shutil.rmtree(model_artifact_dir)
             os.makedirs(model_artifact_dir, exist_ok=True)
-            existing_description = None
+            past_metrics = None
             initial_epoch = 0
 
     # Make callbacks...
@@ -110,7 +114,8 @@ def train_test_eval(train_dataset: tf.data.Dataset,
     stopper = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=2, verbose=1)
     nanChecker = TerminateOnNaN()
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=2, min_lr=1e-3)
-    # TODO: Add description/metric callback
+    metric_callback = MetricCallback(model_odj=model, save_dir=model_artifact_dir, save_freq=1,
+                                     past_metrics=past_metrics)
 
     total_time_start = datetime.datetime.now(datetime.timezone.utc)
     logging.info(f'TRAINING STARTED AT {total_time_start} UTC...')
@@ -124,7 +129,7 @@ def train_test_eval(train_dataset: tf.data.Dataset,
               verbose=1,
               initial_epoch=initial_epoch,
               validation_data=vali_dataset,
-              callbacks=[checkpointer, stopper, nanChecker, reduce_lr])
+              callbacks=[checkpointer, stopper, nanChecker, reduce_lr, metric_callback])
 
     # Report time taken, and metrics on the testing dataset...
     end_time = datetime.datetime.now(datetime.timezone.utc)
