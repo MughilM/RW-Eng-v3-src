@@ -38,7 +38,7 @@ CSV_PIECE_PATH = os.path.join(SRC_DIR, 'csv_piece_output')
 # Primary data path for data...
 DATA_PATH = os.path.join(SRC_DIR, 'processed_data')
 # Generate the huperparameter set from the SRC DIR
-hp_set = HyperparameterSet(SRC_DIR)
+hp_set = HyperparameterSet(os.path.join(SRC_DIR, 'model_implementation/architecture/hp/default_params_all.json'))
 # This is a dictionary which maps the user-provided parameter of the model to
 # the corresponding class
 # TODO: Add models here as necessary, as the argument enforcement is on the keys
@@ -83,6 +83,7 @@ def train_test_eval(train_dataset: tf.data.Dataset,
 
     model_artifact_dir = os.path.join(EXPERIMENT_DIR, experiment_name)
     checkpoint_dir = os.path.join(EXPERIMENT_DIR, experiment_name, 'checkpoints')
+    past_metrics = None
     initial_epoch = 0
     if os.path.exists(model_artifact_dir):
         if args.load_previous:
@@ -102,8 +103,6 @@ def train_test_eval(train_dataset: tf.data.Dataset,
         else:
             shutil.rmtree(model_artifact_dir)
             os.makedirs(model_artifact_dir, exist_ok=True)
-            past_metrics = None
-            initial_epoch = 0
 
     # Make callbacks...
     checkpointer = ModelCheckpoint(filepath=os.path.join(checkpoint_dir, 'cp_{epoch:03d}.ckpt'),
@@ -141,7 +140,8 @@ def train_test_eval(train_dataset: tf.data.Dataset,
     model.load_weights(latest)
     model.evaluate(test_dataset, workers=1)
     print('Testing done. To resume training, please use the checkpoint directory.')
-    print(f'EXPERIMENT SAVED AT {model_artifact_dir}.')
+    hp_set.write_hp()
+    print(f'EXPERIMENT AND HYPERPARAMETERS SAVED AT {model_artifact_dir}.')
 
     return model, model_artifact_dir
 
@@ -254,7 +254,7 @@ if __name__ == '__main__':
 
     # Update the output directory for our hyperparameters,
     # and write the JSON to the model output directory.
-    hp_set.output_dir = model_artifact_dir
+    hp_set.set_output_dir(model_artifact_dir)
     hp_set.write_hp()
 
     end_time = datetime.datetime.now(datetime.timezone.utc)

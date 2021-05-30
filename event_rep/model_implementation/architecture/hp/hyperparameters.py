@@ -18,17 +18,17 @@ logger = logging.getLogger(__name__)
 
 
 class HyperparameterSet:
-    def __init__(self, SRC_DIR, output_dir='./', default_hp_file='default_params_all.json'):
+    def __init__(self, input_hp_file, output_dir='./'):
         """
         Initializer for the default hyperparameter set. The implementation shouldn't be changed
         unless hyperparameters are added. Anyone looking at the source code, do not pay attention
         to the values defined here, as they are immediately overwritten by the values in the JSONs.
         :param output_dir: The directory to output the final hyperparameter JSON
-        :param description_file: The path to the data description file that contains vocabulary data
-        :param default_hp_file: The JSON that contains the default hyperparameters
+        :param input_hp_file: The full path to an initial hyperparameter JSON. The values in this file
+        get set as class attributes during class initialization.
         """
         self.output_dir = output_dir
-        self.default_hp_file = os.path.join(SRC_DIR, 'model_implementation/architecture/hp', default_hp_file)
+        self.input_hp_file = input_hp_file
         # META parameters. Make sure the name matches exactly with JSON keys,
         # as we'll be using setattr to transfer the values over.
         self.batch_size = 0
@@ -57,17 +57,12 @@ class HyperparameterSet:
         self.unk_role_id = 0
         self.word_vocabulary = {}
         self.role_vocabulary = {}
-        # Now read in the JSONs and use setattr to transfer values...
-        with open(self.default_hp_file, 'r') as f:
-            params = json.load(f)
-            update_object_params_dict(self, params)
-        # with open(description_file, 'rb') as f:
-        #     des = pickle.load(f)
-        #     for paramName, value in des.items():
-        #         if hasattr(self, paramName):
-        #             setattr(self, paramName, value)
         self.word_vocab_count = 0
         self.role_vocab_count = 0
+        # Now read in the JSONs and use setattr to transfer values...
+        with open(self.input_hp_file, 'r') as f:
+            params = json.load(f)
+            update_object_params_dict(self, params)
 
     def read_description_params(self, description_file):
         """
