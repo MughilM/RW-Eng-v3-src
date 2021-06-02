@@ -15,12 +15,13 @@ from model_implementation.architecture.hp.hyperparameters import HyperparameterS
 
 
 class EvaluationTask:
-    def __init__(self, model_name, experiment_dir):
+    def __init__(self, SRC_DIR, model_name, experiment_dir):
         # This is needed so the correct model structure is used
         # when loading the model from the checkpoint.
         PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
             'v4': MTRFv4Res
         }
+        self.SRC_DIR = SRC_DIR
         self.model_name = model_name
         self.experiment_dir = experiment_dir
         # Because this is a subclassed model we can't load the model all together,
@@ -28,9 +29,9 @@ class EvaluationTask:
         # the checkpoints to load the weights. On the flip side, we have to make the
         # correct model structure, using the hyperparameters. This is why the model_name
         # is needed. The hyperparameters are saved in the experiment directory.
-        model_hp_set = HyperparameterSet(os.path.join(self.experiment_dir, 'hyperparameters.json'))
+        self.model_hp_set = HyperparameterSet(os.path.join(self.experiment_dir, 'hyperparameters.json'))
         # Load the model using the hyperparameters
-        self.model: MTRFv4Res = PARAM_TO_MODEL[self.model_name](model_hp_set)
+        self.model: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.model_hp_set)
         print('Loaded model:')
         print(self.model.build().summary())
 
@@ -64,3 +65,12 @@ class EvaluationTask:
         return self._calc_score(word_outputs, role_outputs)
 
 
+class BicknellSwitch(EvaluationTask):
+    def _preprocess(self) -> Tuple[Type[np.ndarray], Type[np.ndarray], Type[np.ndarray], Type[np.ndarray]]:
+        """
+        For the B10 dataset, we read in bicknell.txt
+        :return:
+        """
+
+    def _calc_score(self, word_output, role_output):
+        pass
