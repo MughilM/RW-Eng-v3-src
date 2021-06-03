@@ -34,11 +34,15 @@ class EvaluationTask:
         self.model: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.model_hp_set)
         print('Loaded model:')
         print(self.model.build().summary())
+        # This should be used to save any metrics, that can later be written in
+        # the generate report method.
+        self.metrics = {}
 
     def _preprocess(self) -> Tuple[Type[np.ndarray], Type[np.ndarray], Type[np.ndarray], Type[np.ndarray]]:
         """
         This function should output the correctly formatted numpy arrays
-        that are designed to be passed in the model.
+        that are designed to be passed in the model. Any variables that require state
+        and need to be accessed when generating the report should be saved in metrics dictionary.
         :return: A 4-tuple of np.arrays in the correct order, for passing through the model.
         """
         raise NotImplementedError('Please implement a way to preprocess the data.')
@@ -47,30 +51,34 @@ class EvaluationTask:
         """
         This internal method uses the output of the model to calculate the 'score' for
         the evaluation task, whether that be accuracy, correlation, or anything else.
+        The score and anything related to it should be saved in the metrics dictionary for reading
+        later and writing to a report.
+        Ideally, the
         :param word_output: The word outputs from the model.
         :param role_output: The role outputs from the model.
-        :return: A type of score specific to the evaluation task
+        :return:
         """
         raise NotImplementedError('Please implement a way to calculate a score for this task.')
+
+    def _generate_report(self):
+        """
+        This method should be implemented to generate a report, whether that is a txt
+        or any other file of the evaluation results. It should use the values saved in
+        self.metrics dictionary.
+        :return:
+        """
+        raise NotImplementedError('Please implement a way to generate the report and save to the experiment '
+                                  'directory.')
 
     def run_task(self):
         """
         This is a method that should be run externally. It will simply call the preprocess
         and score functions in turn, and output the result of _calc_score(). This
         method SHOULD NOT BE IMPLEMENTED in subclasses.
-        :return: The score for this evaluation task.
+        :return:
         """
         input_words, input_roles, target_word, target_role = self._preprocess()
         word_outputs, role_outputs = self.model([input_words, input_roles, target_word, target_role])
-        return self._calc_score(word_outputs, role_outputs)
+        self._calc_score(word_outputs, role_outputs)
+        self._generate_report()
 
-
-class BicknellSwitch(EvaluationTask):
-    def _preprocess(self) -> Tuple[Type[np.ndarray], Type[np.ndarray], Type[np.ndarray], Type[np.ndarray]]:
-        """
-        For the B10 dataset, we read in bicknell.txt
-        :return:
-        """
-
-    def _calc_score(self, word_output, role_output):
-        pass
