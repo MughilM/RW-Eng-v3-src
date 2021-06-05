@@ -12,6 +12,7 @@ top level also makes running everything easier.
 import argparse
 import datetime
 import json
+import logging
 import os.path
 import shutil
 import sys
@@ -24,6 +25,7 @@ from model_implementation.architecture.models import *
 from model_implementation.core.batcher import WordRoleWriter
 from model_implementation.core.roles import *
 from model_implementation.core.callbacks import MetricCallback
+from evaluation.tasks import CorrelateTFScores
 
 # Directory locations
 # The absolute path where main is being run. Should end in RW-Eng-v3-src/event_rep
@@ -70,6 +72,7 @@ def create_dataset_objects(data_ver):
     test_data = data_writer.get_tf_dataset('test')
 
     return train_data, vali_data, test_data
+
 
 def train_test_eval(train_dataset: tf.data.Dataset,
                     vali_dataset: tf.data.Dataset,
@@ -139,16 +142,19 @@ def train_test_eval(train_dataset: tf.data.Dataset,
     print(f'Testing with latest checkpoint: {latest}')
     model.load_weights(latest)
     model.evaluate(test_dataset, workers=1)
-    print('Testing done. To resume training, please use the checkpoint directory.')
+    print('Testing done. To resume training, please use the checkpoi  nt directory.')
     hp_set.write_hp()
     print(f'EXPERIMENT AND HYPERPARAMETERS SAVED AT {model_artifact_dir}.')
 
     return model, model_artifact_dir
 
 
-def run_thematic_evaluation(tasks: list):
-    pass
-
+def run_thematic_evaluation(tasks: list, model, experiment):
+    print(f'Tasks to run: {tasks}')
+    for task in tasks:
+        print(f'Running {task}...')
+        evaluator = CorrelateTFScores(SRC_DIR, EXPERIMENT_DIR, model, experiment, task)
+        evaluator.run_task()
 
 
 if __name__ == '__main__':
@@ -221,11 +227,38 @@ if __name__ == '__main__':
     # Extra parameter, role set, generally not touched at all.
     parser.add_argument('--role_set', type=Roles, default=Roles2Args3Mods,
                         help='The role set to use. Default Roless2Args3Mods')
+    eval_group = parser.add_mutually_exclusive_group()
+    eval_group.add_argument('--do_eval', action='store_true', default=False,
+                            help='If specified, runs evaluation. See help for evaluation task options.')
+    parser.add_argument('--eval_only', dest='eval_only', action='store_true', default=False,
+                        help='If specified, then DOES NOT RUN TRAINING! It will ONLY run the evaluation '
+                             'tasks. In this way it differs from do_eval, which allows for both training '
+                             'and evaluation in the same program run.')
     # TODO: Add the names of the other evaluation tasks for picking and choosing.
-    parser.add_argument('--evaluation_tasks', choices=['all', 'none'], default='none',
-                        help='The evaluation tasks to run. Default none. ')
+    eval_task_group = parser.add_mutually_exclusive_group()
+    eval_task_group.add_argument('--evaluation_tasks', choices=['pado', 'mcrae', 'greenberg'], nargs='*', default=None,
+                            help='The specific evaluation tasks to run. Must specify at least one.')
+    eval_task_group.add_argument('--run_all_tasks', action='store_true', default=False,
+                            help='If specified, runs ALL thematic fit evaluation tasks.')
 
     args = parser.parse_args()
+    # Small checks for contradictions.
+    if args.eval_only:
+        if args.experiment_name == '':
+            parser.error('You specified to only run evaluation, but did not provide an experiment name.')
+            sys.exit(1)
+        if args.load_previous:
+            parser.error('You specified to only run evaluation, but also to load a previous model for '
+                         'continued training.')
+            sys.exit(1)
+        if args.evaluation_tasks == 'none':
+            parser.error('You specified to only run evaluation, but no evaluation tasks were specified.')
+            sys.exit(1)
+    # Special case, make sure specific evaluation tasks if evaluation is enabled and
+    # run_all_tasks is False.
+    if (args.do_eval or args.eval_only) and not args.run_all_tasks and args.evaluation_tasks is None:
+        parser.error('Evaluation is enabled, but run_all_tasks is disabled and NO evaluation tasks '
+                     'were specified.')
 
     if args.experiment_name == '':
         experiment_name = f"{time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())}_{args.model_name}_" \
@@ -234,28 +267,37 @@ if __name__ == '__main__':
         experiment_name = args.experiment_name
     # Convert arguments into dictionary
     opts = vars(args)
-    # Pop the irrelevant attributes from the dictionary, and pass them to the hyperparameter
-    # set so the values get updated. HOWEVER, THIS ALSO REMOVES THEM FROM THE
-    # NAMESPACE, SO SAVE THE MODEL NAEM AND DATA VERSION.
-    model_name = args.model_name
-    data_version = args.data_version
-    load_previous = args.load_previous
-    irrel_keys = ['model_name', 'data_version', 'role_set', 'experiment_name', 'load_previous']
-    for key in irrel_keys:
-        if key in opts:
-            opts.pop(key)
-    hp_set.update_parameters(opts)
-    # Next, we also need to read in the description file from the input data directory
-    hp_set.read_description_params(os.path.join(DATA_PATH, data_version, 'description'))
+    # Don't run the training if we are only evaluating
+    if not args.eval_only:
+        # Pop the irrelevant attributes from the dictionary, and pass them to the hyperparameter
+        # set so the values get updated. HOWEVER, THIS ALSO REMOVES THEM FROM THE
+        # NAMESPACE, SO SAVE THE MODEL NAEM AND DATA VERSION.
+        model_name = args.model_name
+        data_version = args.data_version
+        load_previous = args.load_previous
+        irrel_keys = ['model_name', 'data_version', 'role_set', 'experiment_name', 'load_previous',
+                      'do_eval', 'eval_only', 'evaluation_tasks', 'run_all_tasks']
+        for key in irrel_keys:
+            if key in opts:
+                opts.pop(key)
+        hp_set.update_parameters(opts)
+        # Next, we also need to read in the description file from the input data directory
+        hp_set.read_description_params(os.path.join(DATA_PATH, data_version, 'description'))
 
-    train, vali, test = create_dataset_objects(data_version)
+        train, vali, test = create_dataset_objects(data_version)
 
-    model, model_artifact_dir = train_test_eval(train, vali, test)
+        model, model_artifact_dir = train_test_eval(train, vali, test)
 
-    # Update the output directory for our hyperparameters,
-    # and write the JSON to the model output directory.
-    hp_set.set_output_dir(model_artifact_dir)
-    hp_set.write_hp()
+        # Update the output directory for our hyperparameters,
+        # and write the JSON to the model output directory.
+        hp_set.set_output_dir(model_artifact_dir)
+        hp_set.write_hp()
+    # Run the evaluation if one of the parameters is specified
+    if args.do_eval or args.eval_only:
+        if args.run_all_tasks:
+            run_thematic_evaluation(['pado', 'mcrae', 'greenberg'])
+        else:
+            run_thematic_evaluation(args.evaluation_tasks, args.model_name, experiment_name)
 
     end_time = datetime.datetime.now(datetime.timezone.utc)
     print(f'PROGRAM ENDED AT {end_time} UTC...')

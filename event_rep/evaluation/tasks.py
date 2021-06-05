@@ -16,7 +16,7 @@ from model_implementation.architecture.hp.hyperparameters import HyperparameterS
 
 
 class EvaluationTask:
-    def __init__(self, SRC_DIR, model_name, experiment_name):
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name):
         # This is needed so the correct model structure is used
         # when loading the model from the checkpoint.
         PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
@@ -30,7 +30,7 @@ class EvaluationTask:
         # the checkpoints to load the weights. On the flip side, we have to make the
         # correct model structure, using the hyperparameters. This is why the model_name
         # is needed. The hyperparameters are saved in the experiment directory.
-        self.hp_set = HyperparameterSet(os.path.join(self.SRC_DIR, self.experiment_name, 'hyperparameters.json'))
+        self.hp_set = HyperparameterSet(os.path.join(self.SRC_DIR, EXPERIMENT_DIR, self.experiment_name, 'hyperparameters.json'))
         # Load the model using the hyperparameters
         self.model: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.hp_set)
         print('Loaded model:')
@@ -89,8 +89,8 @@ class CorrelateTFScores(EvaluationTask):
     noun is supposed to fill, and a thematic fit judgement score. This data should be in
     csv format with columns as verb,noun,role,score.
     """
-    def __init__(self, SRC_DIR, model_name, experiment_name, dataset_name):
-        super().__init__(SRC_DIR, model_name, experiment_name)
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, dataset_name):
+        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name)
         self.dataset_input_file = os.path.join(self.SRC_DIR, f'evaluation/task_data/{dataset_name}.csv')
         self.dataset = pd.read_csv(self.dataset_input_file)
         self.dataset_ids = self.dataset.copy()
@@ -104,10 +104,14 @@ class CorrelateTFScores(EvaluationTask):
         }
         # dataset_ids will have our words all be converted to IDs,
         # including the roles, in the 3rd column. If we have
-        # a word that's not in the vocabulary, then put the unknown word ID.
+        # a word that's not in the vocabulary, then put the unknown word ID (2nd arg in get())
         # These are obtained from the hyperparameter set that was loaded.
-        self.dataset_ids[['verb', 'noun']] = self.dataset_ids[['verb', 'noun']]\
-            .apply(lambda word: self.hp_set.word_vocabulary.get(word, default=self.hp_set.unk_word_id))
+        word_to_id = lambda word: self.hp_set.word_vocabulary.get(word, self.hp_set.unk_word_id)
+        # Doing both columns will not work, as we will run into the Series hash issue.
+        self.dataset_ids['verb'] = self.dataset_ids['verb'].apply(word_to_id)
+        self.dataset_ids['noun'] = self.dataset_ids['noun'].apply(word_to_id)
+        # self.dataset_ids[['verb', 'noun']] = self.dataset_ids[['verb', 'noun']]\
+        #     .apply(lambda word: self.hp_set.word_vocabulary.get(word, self.hp_set.unk_word_id))
         # Convert our role column to role IDs, using the ROLE_MAP and the role vocabulary
         self.dataset_ids['role'] = self.dataset_ids['role'].\
             apply(lambda role: self.hp_set.role_vocabulary[ROLE_MAP[role]])
@@ -136,7 +140,12 @@ class CorrelateTFScores(EvaluationTask):
         }
 
     def _calc_score(self, outputs):
-        pass
+        word_out = outputs['word_output'].numpy()
+        # We want to see what are the word prediction probabilities for the words
+        # in the 'word' column and correlate them with the thematic fit scores.
+        # For now, we will just append the probabilities as a column, and
+        # the report will generate metrics based on missing words.
+        self.dataset['noun_probs'] = word_out[np.arange(self.dataset.shape[0]), self.dataset_ids['noun']]
 
     def _generate_report(self):
-        pass
+        print(self.dataset)
