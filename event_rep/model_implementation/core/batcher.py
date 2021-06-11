@@ -98,6 +98,45 @@ class WordRoleWriter:
         total_time_end = time.perf_counter()
         self.logger.info(f'TOTAL TIME FOR ALL FILES ==> {total_time_end - total_time_start} SECONDS.')
 
+    def get_csv_np_piece(self, data_type):
+        """
+        Method used for debugging. Will retrieve the first csv piece and return
+        as numpy ndarray. During regular training, please use get_tf_dataset
+        :param data_type:
+        :return:
+        """
+        self.logger.info(f'Grabbing the {data_type}1.csv piece.')
+
+        data = np.genfromtxt(os.path.join(self.output_dir, data_type, f'{data_type}1.csv'), delimiter=',', dtype=int)
+        roles, words = data[:, :self.N_ROLES], data[:, self.N_ROLES:]
+        samples = data.shape[0]
+        presentRow = np.sum(words != self.MISSING_WORD_ID, axis=1)
+        targets = np.where(words != self.MISSING_WORD_ID)
+        target_role = roles[targets].reshape((-1, 1))
+        target_word = words[targets].reshape((-1, 1))
+        role_output = np.ravel(target_role)
+        word_output = np.ravel(target_word)
+        elements_to_remove = targets[1]
+
+        words = np.repeat(words, axis=0, repeats=presentRow)
+        roles = np.repeat([roles[0]], axis=0, repeats=words.shape[0])
+
+        flattened_indices = self.N_ROLES * np.arange(words.shape[0]) + elements_to_remove
+        words = np.delete(words, flattened_indices).reshape((-1, self.N_ROLES - 1))
+        roles = np.delete(roles, flattened_indices).reshape((-1, self.N_ROLES - 1))
+        return (
+            {
+                'input_roles': roles,
+                'input_words': words,
+                'target_role': target_role,
+                'target_word': target_word
+            },
+            {
+                'r_out': role_output,
+                'w_out': word_output
+            }
+        )
+
     def get_tf_dataset(self, data_type):
         """
         Gets a Tensorflow Dataset object based on the data type given.
@@ -179,6 +218,6 @@ class WordRoleWriter:
              'input_words': word_input,
              'target_role': target_role_input,
              'target_word': target_word_input},
-            {'role_output': role_target_output,
-             'word_output': word_target_output}
+            {'r_out': role_target_output,
+             'w_out': word_target_output}
         )

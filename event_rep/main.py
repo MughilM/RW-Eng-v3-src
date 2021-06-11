@@ -62,7 +62,7 @@ total_time_start = datetime.datetime.now(datetime.timezone.utc)
 
 def create_dataset_objects(data_ver):
     data_writer = WordRoleWriter(input_data_dir=os.path.join(DATA_PATH, data_ver),
-                                 output_csv_path=CSV_PIECE_PATH,
+                                 output_csv_path=os.path.join(CSV_PIECE_PATH, data_ver),
                                  batch_size=hp_set.batch_size,
                                  MISSING_WORD_ID=hp_set.missing_word_id,
                                  N_ROLES=hp_set.role_vocab_count)
@@ -76,7 +76,8 @@ def create_dataset_objects(data_ver):
 
 def train_test_eval(train_dataset: tf.data.Dataset,
                     vali_dataset: tf.data.Dataset,
-                    test_dataset: tf.data.Dataset):
+                    test_dataset: tf.data.Dataset,
+                    load_previous: bool):
     # Make the model object!
     model: MTRFv4Res = PARAM_TO_MODEL[model_name](hp_set)
     logging.info('Clean model summary:')
@@ -89,7 +90,7 @@ def train_test_eval(train_dataset: tf.data.Dataset,
     past_metrics = None
     initial_epoch = 0
     if os.path.exists(model_artifact_dir):
-        if args.load_previous:
+        if load_previous:
             logging.info(f'Attempting to continue train from a checkpoint at {checkpoint_dir}...')
             if not os.path.exists(checkpoint_dir):
                 logging.error('No checkpoints present! Quitting...')
@@ -123,9 +124,8 @@ def train_test_eval(train_dataset: tf.data.Dataset,
     logging.info(f'TRAINING STARTED AT {total_time_start} UTC...')
 
     # COMPILE AND FIT OUR MODEL!
-    model.compile(optimizer='adagrad', loss='sparse_categorical_crossentropy', metrics=['accuracy'],
-                  loss_weights=[1.] + [hp_set.loss_weight_role])
-    model.fit(train_dataset,
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model.fit(x=train_dataset,
               epochs=initial_epoch + args.epochs,
               workers=1,
               verbose=1,
@@ -142,7 +142,7 @@ def train_test_eval(train_dataset: tf.data.Dataset,
     print(f'Testing with latest checkpoint: {latest}')
     model.load_weights(latest)
     model.evaluate(test_dataset, workers=1)
-    print('Testing done. To resume training, please use the checkpoi  nt directory.')
+    print('Testing done. To resume training, please use the checkpoint directory.')
     hp_set.write_hp()
     print(f'EXPERIMENT AND HYPERPARAMETERS SAVED AT {model_artifact_dir}.')
 
@@ -172,7 +172,7 @@ if __name__ == '__main__':
     parser.add_argument('--experiment_name', type=str, default='',
                         help='The name of the experiment. ALl model artifacts get saved in a subdirectory of'
                              'this name. Will default to a concatenation of the time, model name, and data version.')
-    parser.add_argument('--load_previous', dest='load_previous', action='store_true',
+    parser.add_argument('--load_previous', dest='load_previous', action='store_true', default=False,
                         help='Whether to load a previously trained model.')
     parser.add_argument('--batch_size', type=int, default=hp_set.batch_size,
                         help='The batch size for training')
@@ -200,7 +200,6 @@ if __name__ == '__main__':
                         help='The amount of L1 regularization to use')
     parser.add_argument('--l2_regularization', type=float, default=hp_set.l2_regularization,
                         help='The amount of L2 regularization to use')
-    # TODO: Add more language models as they are added
     parser.add_argument('--language_model', choices=['null', 'xlnet', 'bert'], default=hp_set.language_model,
                         help='The type of language model to use for the word embeddings. This OVERRIDES the'
                              'selection made in embedding_type')
@@ -230,16 +229,15 @@ if __name__ == '__main__':
     eval_group = parser.add_mutually_exclusive_group()
     eval_group.add_argument('--do_eval', action='store_true', default=False,
                             help='If specified, runs evaluation. See help for evaluation task options.')
-    parser.add_argument('--eval_only', dest='eval_only', action='store_true', default=False,
-                        help='If specified, then DOES NOT RUN TRAINING! It will ONLY run the evaluation '
-                             'tasks. In this way it differs from do_eval, which allows for both training '
-                             'and evaluation in the same program run.')
-    # TODO: Add the names of the other evaluation tasks for picking and choosing.
+    eval_group.add_argument('--eval_only', dest='eval_only', action='store_true', default=False,
+                            help='If specified, then DOES NOT RUN TRAINING! It will ONLY run the evaluation '
+                                 'tasks. In this way it differs from do_eval, which allows for both training '
+                                 'and evaluation in the same program run.')
     eval_task_group = parser.add_mutually_exclusive_group()
     eval_task_group.add_argument('--evaluation_tasks', choices=['pado', 'mcrae', 'greenberg'], nargs='*', default=None,
-                            help='The specific evaluation tasks to run. Must specify at least one.')
+                                 help='The specific evaluation tasks to run. Must specify at least one.')
     eval_task_group.add_argument('--run_all_tasks', action='store_true', default=False,
-                            help='If specified, runs ALL thematic fit evaluation tasks.')
+                                 help='If specified, runs ALL thematic fit evaluation tasks.')
 
     args = parser.parse_args()
     # Small checks for contradictions.
@@ -285,8 +283,7 @@ if __name__ == '__main__':
         hp_set.read_description_params(os.path.join(DATA_PATH, data_version, 'description'))
 
         train, vali, test = create_dataset_objects(data_version)
-
-        model, model_artifact_dir = train_test_eval(train, vali, test)
+        model, model_artifact_dir = train_test_eval(train, vali, test, load_previous)
 
         # Update the output directory for our hyperparameters,
         # and write the JSON to the model output directory.

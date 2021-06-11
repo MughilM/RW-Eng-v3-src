@@ -13,6 +13,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import *
 from tensorflow.keras.initializers import glorot_uniform
+import tensorflow.keras.backend as K
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
 
 # Embedding Packages
@@ -99,7 +100,7 @@ class MTRFv4Res(Model):
         self.target_role_output = Dense(self.hp_set.role_vocab_count, activation='softmax', name='role_output')
 
     def call(self, inputs, training=None, mask=None):
-        # WE ASSUME THAT THE INPUTS ARE ORDERED LIKE SO:
+        # WE ASSUME THAT THE INPUTS ARE PASSED IN AS DICTIONARIES WITH THE KEYS:
         # [input_words, input_roles, target_word, target_role]
         # Though of course, when the Model is defined and data is fed through, it is much easier
         # to simply provide a tf.dataset where the input layer names map properly...
@@ -114,7 +115,6 @@ class MTRFv4Res(Model):
             mask = self.embedding_mask(input_words)
             # Update the embeddings
             word_embedding_out = self.word_embed_multi([word_embedding_out, mask])
-            role_embedding_out = self.role_embed_multi([role_embedding_out, mask])
         # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...
         # ...but our default is nonzero...
         word_embedding_out = self.word_dropout(word_embedding_out)
@@ -140,7 +140,7 @@ class MTRFv4Res(Model):
         # Forward through the output layers and we are done!
         tw_out = self.target_word_output(twh_out)
         tr_out = self.target_role_output(trh_out)
-        return {'word_output': tw_out, 'role_output': tr_out}
+        return {'w_out': tw_out, 'r_out': tr_out}
 
     def build(self, input_shapes=None):
         """
