@@ -20,6 +20,7 @@ import time
 from typing import Dict, Type
 
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau, TerminateOnNaN
+from tensorflow.keras.optimizers import Adam
 
 from model_implementation.architecture.models import *
 from model_implementation.core.batcher import WordRoleWriter
@@ -74,7 +75,9 @@ def create_dataset_objects(data_ver):
     return train_data, vali_data, test_data
 
 
-def train_test_eval(train_dataset: tf.data.Dataset,
+def train_test_eval(model_name,
+                    experiment_name,
+                    train_dataset: tf.data.Dataset,
                     vali_dataset: tf.data.Dataset,
                     test_dataset: tf.data.Dataset,
                     load_previous: bool):
@@ -83,7 +86,6 @@ def train_test_eval(train_dataset: tf.data.Dataset,
     logging.info('Clean model summary:')
     # Extra parentheses for build() because input_shapes are not required.
     model.build().summary()
-    tf.keras.utils.plot_model(model.build(), show_shapes=True)
 
     model_artifact_dir = os.path.join(EXPERIMENT_DIR, experiment_name)
     checkpoint_dir = os.path.join(EXPERIMENT_DIR, experiment_name, 'checkpoints')
@@ -124,7 +126,7 @@ def train_test_eval(train_dataset: tf.data.Dataset,
     logging.info(f'TRAINING STARTED AT {total_time_start} UTC...')
 
     # COMPILE AND FIT OUR MODEL!
-    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=Adam(learning_rate=0.01), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     model.fit(x=train_dataset,
               epochs=initial_epoch + args.epochs,
               workers=1,
@@ -143,14 +145,13 @@ def train_test_eval(train_dataset: tf.data.Dataset,
     model.load_weights(latest)
     model.evaluate(test_dataset, workers=1)
     print('Testing done. To resume training, please use the checkpoint directory.')
-    hp_set.write_hp()
-    print(f'EXPERIMENT AND HYPERPARAMETERS SAVED AT {model_artifact_dir}.')
+    print(f'EXPERIMENT AND HYPERPARAMETERS SAVED AT {model_artifact_dir}.\n')
 
     return model, model_artifact_dir
 
 
 def run_thematic_evaluation(tasks: list, model, experiment):
-    print(f'Tasks to run: {tasks}')
+    print(f'Evaluation Tasks to run: {tasks}')
     for task in tasks:
         print(f'Running {task}...')
         evaluator = CorrelateTFScores(SRC_DIR, EXPERIMENT_DIR, model, experiment, task)
@@ -242,8 +243,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # Small checks for contradictions.
     if args.eval_only:
-        if args.experiment_name == '':
-            parser.error('You specified to only run evaluation, but did not provide an experiment name.')
+        if args.experiment_name == '' or not os.path.exists(os.path.join(EXPERIMENT_DIR, args.experiment_name)):
+            parser.error('You specified to only run evaluation, but did not provide an experiment name or '
+                         'the experiment does not exist.')
             sys.exit(1)
         if args.load_previous:
             parser.error('You specified to only run evaluation, but also to load a previous model for '
@@ -267,23 +269,13 @@ if __name__ == '__main__':
     opts = vars(args)
     # Don't run the training if we are only evaluating
     if not args.eval_only:
-        # Pop the irrelevant attributes from the dictionary, and pass them to the hyperparameter
-        # set so the values get updated. HOWEVER, THIS ALSO REMOVES THEM FROM THE
-        # NAMESPACE, SO SAVE THE MODEL NAEM AND DATA VERSION.
-        model_name = args.model_name
-        data_version = args.data_version
-        load_previous = args.load_previous
-        irrel_keys = ['model_name', 'data_version', 'role_set', 'experiment_name', 'load_previous',
-                      'do_eval', 'eval_only', 'evaluation_tasks', 'run_all_tasks']
-        for key in irrel_keys:
-            if key in opts:
-                opts.pop(key)
         hp_set.update_parameters(opts)
         # Next, we also need to read in the description file from the input data directory
-        hp_set.read_description_params(os.path.join(DATA_PATH, data_version, 'description'))
+        hp_set.read_description_params(os.path.join(DATA_PATH, args.data_version, 'description'))
 
-        train, vali, test = create_dataset_objects(data_version)
-        model, model_artifact_dir = train_test_eval(train, vali, test, load_previous)
+        train, vali, test = create_dataset_objects(args.data_version)
+        model, model_artifact_dir = train_test_eval(args.model_name, experiment_name,
+                                                    train, vali, test, args.load_previous)
 
         # Update the output directory for our hyperparameters,
         # and write the JSON to the model output directory.
@@ -298,4 +290,4 @@ if __name__ == '__main__':
 
     end_time = datetime.datetime.now(datetime.timezone.utc)
     print(f'PROGRAM ENDED AT {end_time} UTC...')
-    print(f'TOTAL TIME: {str(end_time - total_time_start)}')
+    print(f'TOTAL TIME: {str(end_time - total_time_start)}\n')

@@ -47,7 +47,7 @@ class MetricCallback(Callback):
         min_loc = int(np.argmin(self.history['val_loss']))
         self.metrics['best_validation_cost'] = self.history['val_loss'][min_loc]
         self.metrics['best_epcoh'] = min_loc + 1
-        self.metrics['total_epochs'] = 1
+        self.metrics['total_epochs'] += 1
 
         # Write the file to the save directory on the save frequency
         if self.metrics['total_epochs'] % self.save_freq == 0:

@@ -6,11 +6,11 @@ Creation Date: 2021-05-29
 This file contains our evaluation tasks. We have a base class that defines the basic
 functions, while the rest are subclassed.
 """
-import tensorflow as tf
 import numpy as np
 import pandas as pd
+from scipy.stats import spearmanr
 import os
-from typing import Dict, Type, Tuple
+from typing import Dict, Type
 from model_implementation.architecture.models import MTRFv4Res
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
 
@@ -23,6 +23,7 @@ class EvaluationTask:
             'v4': MTRFv4Res
         }
         self.SRC_DIR = SRC_DIR
+        self.EXPERIMENT_DIR = EXPERIMENT_DIR
         self.model_name = model_name
         self.experiment_name = experiment_name
         # Because this is a subclassed model we can't load the model all together,
@@ -30,11 +31,10 @@ class EvaluationTask:
         # the checkpoints to load the weights. On the flip side, we have to make the
         # correct model structure, using the hyperparameters. This is why the model_name
         # is needed. The hyperparameters are saved in the experiment directory.
-        self.hp_set = HyperparameterSet(os.path.join(self.SRC_DIR, EXPERIMENT_DIR, self.experiment_name, 'hyperparameters.json'))
+        self.hp_set = HyperparameterSet(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'hyperparameters.json'))
         # Load the model using the hyperparameters
         self.model: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.hp_set)
-        print('Loaded model:')
-        print(self.model.build().summary())
+        print(f'Loaded model and hyperparameters from {self.EXPERIMENT_DIR}')
         # This should be used to save any metrics, that can later be written in
         # the generate report method.
         self.metrics = {}
@@ -91,6 +91,7 @@ class CorrelateTFScores(EvaluationTask):
     """
     def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, dataset_name):
         super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name)
+        self.dataset_name = dataset_name
         self.dataset_input_file = os.path.join(self.SRC_DIR, f'evaluation/task_data/{dataset_name}.csv')
         self.dataset = pd.read_csv(self.dataset_input_file)
         self.dataset_ids = self.dataset.copy()
@@ -140,12 +141,16 @@ class CorrelateTFScores(EvaluationTask):
         }
 
     def _calc_score(self, outputs):
-        word_out = outputs['word_output'].numpy()
+        word_out = outputs['w_out'].numpy()
         # We want to see what are the word prediction probabilities for the words
         # in the 'word' column and correlate them with the thematic fit scores.
         # For now, we will just append the probabilities as a column, and
         # the report will generate metrics based on missing words.
         self.dataset['noun_probs'] = word_out[np.arange(self.dataset.shape[0]), self.dataset_ids['noun']]
+        rho, p = spearmanr(self.dataset['score'], self.dataset['noun_probs'])
+        self.metrics['rho'] = rho
+        self.metrics['p'] = p
 
     def _generate_report(self):
-        print(self.dataset)
+        os.makedirs(os.path.join(self.EXPERIMENT_DIR, 'evaluation_results'))
+        print(self.metrics)
