@@ -142,8 +142,10 @@ event_rep/pretrained_embeddings
 # Ignore the directory with CSV pieces
 event_rep/csv_piece_output
 
-# Ignore dataset folder
-event_rep/processed_data
+# Ignore dataset folder, except for v2.
+!event_rep/processed_data/*
+event_rep/processed_data/*/*
+!event_rep/processed_data/v2/*
 
 # Ignore a sandbox directory for misc one-off stuff that do not need
 # to be committed e.g. function testing.
