@@ -194,7 +194,8 @@ class CorrelateTFScores(EvaluationTask):
                       f"P-value of {self.metrics['p']:.6f}\n"
         fin_report += f"MISSING REMOVED ({self.dataset_dropped.shape[0]}): {self.metrics['rho_m'] * 100:.3f}%, " \
                       f"P-value of {self.metrics['p_m']:.6f}"
-        with open(os.path.join(self.EXPERIMENT_DIR, 'evaluation_results', f'{self.dataset_name}.txt'),
+        with open(os.path.join(self.EXPERIMENT_DIR, self.experiment_name,
+                               'evaluation_results', f'{self.dataset_name}.txt'),
                   'w', encoding='utf-8') as f:
             f.write(header)
             f.write(mv_report)
