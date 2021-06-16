@@ -105,9 +105,9 @@ class CorrelateTFScores(EvaluationTask):
         }
         # dataset_ids will have our words all be converted to IDs,
         # including the roles, in the 3rd column. If we have
-        # a word that's not in the vocabulary, then put the unknown word ID (2nd arg in get())
+        # a word that's not in the vocabulary, then put the missing word ID (2nd arg in get())
         # These are obtained from the hyperparameter set that was loaded.
-        word_to_id = lambda word: self.hp_set.word_vocabulary.get(word, self.hp_set.unk_word_id)
+        word_to_id = lambda word: self.hp_set.word_vocabulary.get(word, self.hp_set.missing_word_id)
         # Doing both columns will not work, as we will run into the Series hash issue.
         self.dataset_ids['verb'] = self.dataset_ids['verb'].apply(word_to_id)
         self.dataset_ids['noun'] = self.dataset_ids['noun'].apply(word_to_id)
@@ -147,8 +147,8 @@ class CorrelateTFScores(EvaluationTask):
         self.dataset['noun_probs'] = word_out[np.arange(self.dataset.shape[0]), self.dataset_ids['noun']]
         # We will save the missing words, and calculate a correlation for t he whole
         # dataset as well as a correlation with the missing words removed.
-        missing_verbs = self.dataset['verb'][self.dataset_ids['verb'] == self.hp_set.unk_word_id]
-        missing_nouns = self.dataset['noun'][self.dataset_ids['noun'] == self.hp_set.unk_word_id]
+        missing_verbs = self.dataset['verb'][self.dataset_ids['verb'] == self.hp_set.missing_word_id]
+        missing_nouns = self.dataset['noun'][self.dataset_ids['noun'] == self.hp_set.missing_word_id]
         self.metrics['missing_verbs'] = np.unique(missing_verbs.values)
         self.metrics['missing_nouns'] = np.unique(missing_nouns.values)
         # Combine the two indices so we can easily remove from the main df in one line
@@ -165,7 +165,7 @@ class CorrelateTFScores(EvaluationTask):
         self.metrics['p_m'] = p
 
     def _generate_report(self):
-        os.makedirs(os.path.join(self.EXPERIMENT_DIR, 'evaluation_results'), exist_ok=True)
+        os.makedirs(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'evaluation_results'), exist_ok=True)
         # Short helper method to draw a box around a piece of text given padding...
         make_box = lambda text, spaces: f"╔{'=' * (len(text) + 2 * spaces)}╗\n║{' ' * spaces}{text}{' ' * spaces}║\n" \
                                         f"╚{'=' * (len(text) + 2 * spaces)}╝\n"
@@ -183,8 +183,7 @@ class CorrelateTFScores(EvaluationTask):
             mv_report += '\n'.join(self.metrics['missing_verbs']) + '\n'
         if len(self.metrics['missing_nouns']) > 0:
             mv_report += f"MISSING NOUNS\n{'=' * len(max(self.metrics['missing_nouns'], key=lambda x: len(x)))}\n"
-            mv_report += '\n'.join(self.metrics['missing_nouns']) + '\n'
-        mv_report += '\n'
+            mv_report += '\n'.join(self.metrics['missing_nouns']) + '\n\n'
 
         # Final report on correlations...
         fin_report = make_box('FINAL SPEARMAN CORRELATIONS', 6) + '\n'
@@ -194,6 +193,124 @@ class CorrelateTFScores(EvaluationTask):
                       f"P-value of {self.metrics['p']:.6f}\n"
         fin_report += f"MISSING REMOVED ({self.dataset_dropped.shape[0]}): {self.metrics['rho_m'] * 100:.3f}%, " \
                       f"P-value of {self.metrics['p_m']:.6f}"
+        with open(os.path.join(self.EXPERIMENT_DIR, self.experiment_name,
+                               'evaluation_results', f'{self.dataset_name}.txt'),
+                  'w', encoding='utf-8') as f:
+            f.write(header)
+            f.write(mv_report)
+            f.write(fin_report)
+
+
+class BicknellTask(EvaluationTask):
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name):
+        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name)
+        self.dataset_name = 'bicknell'
+        self.dataset_input_file = os.path.join(SRC_DIR, f'evaluation/task_data/{self.dataset_name}.csv')
+        self.dataset = pd.read_csv(self.dataset_input_file)
+        self.dataset_ids = self.dataset.copy()
+
+    def _preprocess(self) -> Dict[str, np.ndarray]:
+        """
+        We have 4 columns in the bicknell.csv. The input roles are A0 and V,
+        while the output role is A1.
+        :return:
+        """
+        # Convert the 4 columns of words to integers. Unfortunately, doing it
+        # all at once leads to error, which is unusual...
+        word_to_id = lambda word: self.hp_set.word_vocabulary.get(word, self.hp_set.missing_word_id)
+        for col in self.dataset.columns:
+            self.dataset_ids[col] = self.dataset_ids[col].apply(word_to_id)
+        # With the input word IDs on hand, let us create the input role IDs.
+        # The important thing here is that even though there is data for only 2 input roles,
+        # the order must be preserved. To see which ID maps to which role, we use
+        # the role vocabulary. The input roles will still be 0-5, except the corresponding
+        # columns in the input word matrix will be adjusted accordingly.
+        input_roles = np.repeat(np.arange(6, dtype=int)[np.newaxis, :], repeats=self.dataset.shape[0], axis=0)
+        # Initially fill the input words with missing words
+        input_words = np.full(shape=(self.dataset.shape[0], 6), fill_value=self.hp_set.missing_word_id, dtype=int)
+        # Get the agent and verb IDs from the role vocabulary so we know what column to change...
+        agent_id = self.hp_set.role_vocabulary['A0']
+        verb_id = self.hp_set.role_vocabulary['V']
+        # Change the correct columns in input_words...
+        input_words[:, agent_id] = self.dataset_ids['agent'].values
+        input_words[:, verb_id] = self.dataset_ids['verb'].values
+        # Patient is the target role, corresponds to A1...
+        target_role = np.repeat([[self.hp_set.role_vocabulary['A1']]], repeats=self.dataset.shape[0], axis=0)
+        # target word doesn't matter, since we are not interested in the predicted roles...
+        target_word = np.full(shape=(self.dataset.shape[0], 1), fill_value=1729, dtype=int)
+        # These are our inputs to the model.
+        return {
+            'input_roles': input_roles,
+            'input_words': input_words,
+            'target_role': target_role,
+            'target_word': target_word
+        }
+
+    def _calc_score(self, outputs: dict):
+        """
+        For Bicknell, we compare the probabilities of the congruent and
+        incongruent patients.
+        :param outputs:
+        :return:
+        """
+        word_out = outputs['w_out']
+        # Index the congruent and incornguent patients
+        self.dataset['cong_prob'] = word_out[np.arange(self.dataset.shape[0]), self.dataset_ids['cong_patient']]
+        self.dataset['incong_prob'] = word_out[np.arange(self.dataset.shape[0]), self.dataset_ids['incong_patient']]
+        # Find the missing words...Use dataset id columns because we just added 2 cols to dataset
+        # Don't do unique yet, because we need the index.
+        for col in self.dataset_ids.columns:
+            self.metrics[f'missing_{col}s'] = self.dataset[col][self.dataset_ids[col] == self.hp_set.missing_word_id]
+        # Union the index of the 4 columns to find the total missing #
+        # and unique the missing words...
+        total_missing_index = self.metrics['missing_agents'].index
+        self.metrics['missing_agentn'] = np.unique(self.metrics['missing_agents'].values)
+        for col in ['verb', 'cong_patient', 'incong_patient']:
+            total_missing_index = total_missing_index.union(self.metrics[f'missing_{col}s'].index)
+            self.metrics[f'missing_{col}s'] = np.unique(self.metrics[f'missing_{col}s'].values)
+        self.metrics['missing_n'] = len(total_missing_index)
+        # Create a dataset which drops the missing values. Calculate
+        # accuracy on this one and the full dataset...
+        self.dataset_dropped = self.dataset.drop(index=total_missing_index)
+        self.metrics['num_correct_m'] = self.dataset_dropped.loc[self.dataset_dropped['cong_prob'] >
+                                                                 self.dataset_dropped['incong_prob'], :].shape[0]
+        self.metrics['num_incorrect_m'] = self.dataset_dropped.shape[0] - self.metrics['num_correct_m']
+        self.metrics['accuracy_m'] = self.metrics['num_correct_m'] / self.dataset_dropped.shape[0]
+        # Now for the full dataset...
+        self.metrics['num_correct'] = self.dataset.loc[self.dataset['cong_prob'] >
+                                                                 self.dataset['incong_prob'], :].shape[0]
+        self.metrics['num_incorrect'] = self.dataset.shape[0] - self.metrics['num_correct_m']
+        self.metrics['accuracy'] = self.metrics['num_correct_m'] / self.dataset.shape[0]
+
+    def _generate_report(self):
+        os.makedirs(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'evaluation_results'), exist_ok=True)
+        # Short helper method to draw a box around a piece of text given padding...
+        make_box = lambda text, spaces: f"╔{'=' * (len(text) + 2 * spaces)}╗\n║{' ' * spaces}{text}{' ' * spaces}║\n" \
+                                        f"╚{'=' * (len(text) + 2 * spaces)}╝\n"
+        # Make the header
+        header = make_box(f'{self.dataset_name.upper()} RESULTS', 12) + '\n'
+
+        # Missing word label...
+        mv_report = make_box('MISSING WORD REPORT', 4)
+        mv_report += f'The breakdown of missing words are as follows:\n'
+        for col in self.dataset_ids.columns:
+            mv_report += f"  - {len(self.metrics[f'missing_{col}s'])} {col}s\n"
+        mv_report += f"This contributes to a total of {self.metrics['missing_n']} missing samples.\n\n"
+        # Now for the actual words that are missing...
+        for col in self.dataset_ids.columns:
+            if len(self.metrics[f'missing_{col}s']) > 0:
+                mv_report += f"MISSING {col.upper()}S\n" \
+                             f"{'=' * len(max(self.metrics[f'missing_{col}s'], key=lambda x: len(x)))}\n"
+                mv_report += '\n'.join(self.metrics[f'missing_{col}s']) + '\n\n'
+
+        # Final metrics reprot at the end
+        fin_report = make_box('FINAL ACCURACY METRICS', 6) + '\n'
+        # Report accuracy as correct / total and as percentage
+        fin_report += f"ENTIRE DATASET ({self.dataset.shape[0]}): {self.metrics['num_correct']} / " \
+                      f"{self.dataset.shape[0]} = {self.metrics['accuracy'] * 100:.3f}%\n"
+        fin_report += f"MISSING REMOVED ({self.dataset_dropped.shape[0]}): {self.metrics['num_correct_m']} / " \
+                      f"{self.dataset_dropped.shape[0]} = {self.metrics['accuracy_m'] * 100:.3f}%"
+        # Write to the file
         with open(os.path.join(self.EXPERIMENT_DIR, self.experiment_name,
                                'evaluation_results', f'{self.dataset_name}.txt'),
                   'w', encoding='utf-8') as f:
