@@ -11,7 +11,7 @@ import pandas as pd
 from scipy.stats import spearmanr
 import os
 from typing import Dict, Type
-from model_implementation.architecture.models import MTRFv4Res
+from model_implementation.architecture.models import *
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
 
 
@@ -20,7 +20,8 @@ class EvaluationTask:
         # This is needed so the correct model structure is used
         # when loading the model from the checkpoint.
         PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
-            'v4': MTRFv4Res
+            'v4': MTRFv4Res,
+            'v5': MTRFv5Res
         }
         self.SRC_DIR = SRC_DIR
         self.EXPERIMENT_DIR = EXPERIMENT_DIR

@@ -46,7 +46,8 @@ hp_set = HyperparameterSet(os.path.join(SRC_DIR, 'model_implementation/architect
 # the corresponding class
 # TODO: Add models here as necessary, as the argument enforcement is on the keys
 PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
-    'v4': MTRFv4Res
+    'v4': MTRFv4Res,
+    'v5': MTRFv5Res
 }
 
 # Make the directories if they don't already exist.
@@ -86,6 +87,8 @@ def train_test_eval(model_name,
     logging.info('Clean model summary:')
     # Extra parentheses for build() because input_shapes are not required.
     model.build().summary()
+    # Same model image to experiment directory.
+    os.makedirs(os.path.join(EXPERIMENT_DIR, experiment_name), exist_ok=True)
 
     model_artifact_dir = os.path.join(EXPERIMENT_DIR, experiment_name)
     checkpoint_dir = os.path.join(EXPERIMENT_DIR, experiment_name, 'checkpoints')
@@ -109,7 +112,9 @@ def train_test_eval(model_name,
         else:
             shutil.rmtree(model_artifact_dir)
             os.makedirs(model_artifact_dir, exist_ok=True)
-
+    # Put model image in the model artifacts for reference afterwards.
+    tf.keras.utils.plot_model(model.build(), to_file=os.path.join(model_artifact_dir, f'{model_name}.png'),
+                              show_shapes=True)
     # Make callbacks...
     checkpointer = ModelCheckpoint(filepath=os.path.join(checkpoint_dir, 'cp_{epoch:03d}.ckpt'),
                                    monitor='val_loss',

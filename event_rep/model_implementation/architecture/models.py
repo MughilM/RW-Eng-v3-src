@@ -83,13 +83,13 @@ class MTRFv4Res(Model):
         # Create two dropout layers for both, and a reshape layer as there is an extra dimension.
         self.target_word_drop = Dropout(self.hp_set.dropout_rate, name='target_word_dropout')
         self.target_role_drop = Dropout(self.hp_set.dropout_rate, name='target_role_dropout')
-        self.target_word_reshape = Reshape((self.hp_set.n_factors_cls,), name='reshape_target_word_embedding')
-        self.target_role_reshape = Reshape((self.hp_set.n_factors_cls,), name='reshape_target_role_embedding')
+        self.target_word_flatten = Flatten(name='flatten_target_word_embedding')
+        self.target_role_flatten = Flatten(name='flatten_target_role_embedding')
         # Create two weighted context embeddings that will pass into each target embedding
         self.weight_context_word = Dense(self.hp_set.n_factors_cls, activation='linear', use_bias=False,
-                                         name='weighted_context_1')
+                                         name='weighted_context_word')
         self.weight_context_role = Dense(self.hp_set.n_factors_cls, activation='linear', use_bias=False,
-                                         name='weighted_context_2')
+                                         name='weighted_context_role')
         # Create two Multiply layers for when we multiply the weighted context with the embeddings...
         # Remember to cross! These will be enforced during call.
         self.target_word_hidden = Multiply(name='cont_x_tre')  # target ROLE embedding for target word hidden
@@ -137,11 +137,11 @@ class MTRFv4Res(Model):
         # Note the crossing of inputs into the other's hidden layer.
         twh_out = self.target_word_hidden([
             self.weight_context_word(context_embedding),
-            self.target_role_reshape(self.target_role_drop(self.target_role_embedding(target_role)))
+            self.target_role_flatten(self.target_role_drop(self.target_role_embedding(target_role)))
         ])
         trh_out = self.target_role_hidden([
             self.weight_context_role(context_embedding),
-            self.target_word_reshape(self.target_word_drop(self.target_word_embedding(target_word)))
+            self.target_word_flatten(self.target_word_drop(self.target_word_embedding(target_word)))
         ])
         # Forward through the output layers.
         # If training is False, then DO NOT USE THE BIAS IN THE OUTPUT LAYERS...
@@ -276,3 +276,77 @@ class MTRFv4Res(Model):
                          embeddings_initializer=full_embedding_matrix,
                          name=layer_name,
                          trainable=not self.hp_set.freeze_word_embeddings)
+
+
+class MTRFv5Res(MTRFv4Res):
+    """
+    In v5 of the model, we use a 'shared embedding', in the sense
+    that the TARGET words and roles will use the same embedding as the
+    input words and roles. This is to see if we can preserve model
+    performance even when drastically reducing the number of parameters.
+
+    The only thing we need to change in init, are the weighted context
+    layers, since they need to be multiplied with the flattened embedding,
+    because the dimensions have changed now. We also need to re-implement
+    call, for a such a small change. This is a downside of model subclassing.
+    We could use helper methods, but that introduces more links we need to manage.
+    Plus, we have no idea how the functions would link from one to the next.
+    """
+    def __init__(self, hp_set: HyperparameterSet, **kwargs):
+        super().__init__(hp_set, **kwargs)
+        # Weighted context word will multiply with target role embedding,
+        # so output nodes should be the same as the role embedding dimension.
+        # Likewise for the weighted context role and target word embedding.
+        self.weight_context_word = Dense(self.hp_set.role_embedding_dimension, activation='linear', use_bias=False,
+                                         name='weighted_context_word')
+        self.weight_context_role = Dense(self.hp_set.word_embedding_dimension, activation='linear', use_bias=False,
+                                         name='weighted_context_role')
+
+    def call(self, inputs, training=True, mask=None, get_embedding=False):
+        input_words, input_roles, target_word, target_role = inputs['input_words'], inputs['input_roles'], \
+                                                             inputs['target_word'], inputs['target_role']
+        # Pass inputs through embedding...
+        word_embedding_out = self.word_embedding(input_words)
+        role_embedding_out = self.role_embedding(input_roles)
+        # Now zero out the missing word embeddings if need be.
+        if self.hp_set.zero_out_miss_embedding:
+            mask = self.embedding_mask(input_words)
+            # Update the embeddings
+            word_embedding_out = self.word_embed_multi([word_embedding_out, mask])
+        # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...
+        # ...but our default is nonzero...
+        word_embedding_out = self.word_dropout(word_embedding_out)
+        role_embedding_out = self.role_dropout(role_embedding_out)
+        # Concatenate the two embeddings
+        total_embeddings = self.embedding_multiply([word_embedding_out, role_embedding_out])
+        # Pass the total embeddings through the residual block next
+        residual = self.prelu_proj_add([
+            total_embeddings,
+            self.lin_proj2(self.prelu(self.lin_proj1(total_embeddings)))
+        ])
+        context_embedding = self.average_across_input(residual)
+        if get_embedding:
+            return context_embedding
+        # Create target role and word embeddings multiplied with the context.
+        # Note the crossing of inputs into the other's hidden layer.
+        ###### THE CHANGE IS HERE! INSTEAD OF USING target_word/role_embedding,
+        ###### we use word/role embedding...The flattening stands...
+        twh_out = self.target_word_hidden([
+            self.weight_context_word(context_embedding),
+            self.target_role_flatten(self.target_role_drop(self.role_embedding(target_role)))
+        ])
+        trh_out = self.target_role_hidden([
+            self.weight_context_role(context_embedding),
+            self.target_word_flatten(self.target_word_drop(self.word_embedding(target_word)))
+        ])
+        # Forward through the output layers.
+        # If training is False, then DO NOT USE THE BIAS IN THE OUTPUT LAYERS...
+        if not training:
+            tw_out_raw = tf.tensordot(twh_out, self.target_word_output_raw.weights[0], axes=1)
+            tr_out_raw = tf.tensordot(trh_out, self.target_role_output_raw.weights[0], axes=1)
+        else:
+            tw_out_raw = self.target_word_output_raw(twh_out)
+            tr_out_raw = self.target_role_output_raw(trh_out)
+        tw_out = self.target_word_act(tw_out_raw)
+        tr_out = self.target_role_act(tr_out_raw)
+        return {'w_out': tw_out, 'r_out': tr_out}

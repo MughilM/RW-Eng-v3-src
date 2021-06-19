@@ -12,7 +12,7 @@
   "learning_rate": 0.01,
   "learning_rate_decay": 0.0,
   "loss_weight_role": 1.0,
-  "n_factors_cls": 512,
+  "n_factors_cls": 300,
   "pretrained_embedding_size": 300,
   "role_embedding_dimension": 300,
   "word_embedding_dimension": 300,
