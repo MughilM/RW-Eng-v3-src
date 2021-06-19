@@ -78,7 +78,7 @@ class EvaluationTask:
         :return:
         """
         all_inputs = self._preprocess()
-        outputs = self.model.predict(all_inputs)
+        outputs = self.model(all_inputs, training=False)
         self._calc_score(outputs)
         self._generate_report()
 
@@ -139,7 +139,7 @@ class CorrelateTFScores(EvaluationTask):
         }
 
     def _calc_score(self, outputs):
-        word_out = outputs['w_out']
+        word_out = outputs['w_out'].numpy()
         # We want to see what are the word prediction probabilities for the words
         # in the 'word' column and correlate them with the thematic fit scores.
         # For now, we will just append the probabilities as a column, and
@@ -253,7 +253,7 @@ class BicknellTask(EvaluationTask):
         :param outputs:
         :return:
         """
-        word_out = outputs['w_out']
+        word_out = outputs['w_out'].numpy()
         # Index the congruent and incornguent patients
         self.dataset['cong_prob'] = word_out[np.arange(self.dataset.shape[0]), self.dataset_ids['cong_patient']]
         self.dataset['incong_prob'] = word_out[np.arange(self.dataset.shape[0]), self.dataset_ids['incong_patient']]
@@ -497,7 +497,7 @@ class GS2013Task(EvaluationTask):
         :return:
         """
         all_inputs = self._preprocess()
-        base_context = self.model(all_inputs['base_verb_input'], get_embedding=True)
-        landmark_context = self.model(all_inputs['landmark_verb_input'], get_embedding=True)
+        base_context = self.model(all_inputs['base_verb_input'], training=False, get_embedding=True)
+        landmark_context = self.model(all_inputs['landmark_verb_input'], training=False, get_embedding=True)
         self._calc_score(base_context, landmark_context)
         self._generate_report()

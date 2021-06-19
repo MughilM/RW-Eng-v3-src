@@ -96,10 +96,14 @@ class MTRFv4Res(Model):
         self.target_role_hidden = Multiply(name='cont_x_twe')  # target WORD embedding for target role hidden
 
         ### FINALLY THE OUTPUTS
-        self.target_word_output = Dense(self.hp_set.word_vocab_count, activation='softmax', name='word_output')
-        self.target_role_output = Dense(self.hp_set.role_vocab_count, activation='softmax', name='role_output')
+        # The reason the activation is separated is because it makes it easy
+        # to NOT USE THE BIAS during the evaluation tasks.
+        self.target_word_output_raw = Dense(self.hp_set.word_vocab_count, name='word_output_raw')
+        self.target_role_output_raw = Dense(self.hp_set.role_vocab_count, name='role_output_raw')
+        self.target_word_act = Activation('softmax', name='word_output_act')
+        self.target_role_act = Activation('softmax', name='role_output_act')
 
-    def call(self, inputs, training=None, mask=None, get_embedding=False):
+    def call(self, inputs, training=True, mask=None, get_embedding=False):
         # WE ASSUME THAT THE INPUTS ARE PASSED IN AS DICTIONARIES WITH THE KEYS:
         # [input_words, input_roles, target_word, target_role]
         # Though of course, when the Model is defined and data is fed through, it is much easier
@@ -139,9 +143,16 @@ class MTRFv4Res(Model):
             self.weight_context_role(context_embedding),
             self.target_word_reshape(self.target_word_drop(self.target_word_embedding(target_word)))
         ])
-        # Forward through the output layers and we are done!
-        tw_out = self.target_word_output(twh_out)
-        tr_out = self.target_role_output(trh_out)
+        # Forward through the output layers.
+        # If training is False, then DO NOT USE THE BIAS IN THE OUTPUT LAYERS...
+        if not training:
+            tw_out_raw = tf.tensordot(twh_out, self.target_word_output_raw.weights[0], axes=1)
+            tr_out_raw = tf.tensordot(trh_out, self.target_role_output_raw.weights[0], axes=1)
+        else:
+            tw_out_raw = self.target_word_output_raw(twh_out)
+            tr_out_raw = self.target_role_output_raw(trh_out)
+        tw_out = self.target_word_act(tw_out_raw)
+        tr_out = self.target_role_act(tr_out_raw)
         return {'w_out': tw_out, 'r_out': tr_out}
 
     def build(self, input_shapes=None):
