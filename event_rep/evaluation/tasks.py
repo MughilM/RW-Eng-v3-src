@@ -264,7 +264,7 @@ class BicknellTask(EvaluationTask):
         # Union the index of the 4 columns to find the total missing #
         # and unique the missing words...
         total_missing_index = self.metrics['missing_agents'].index
-        self.metrics['missing_agentn'] = np.unique(self.metrics['missing_agents'].values)
+        self.metrics['missing_agents'] = np.unique(self.metrics['missing_agents'].values)
         for col in ['verb', 'cong_patient', 'incong_patient']:
             total_missing_index = total_missing_index.union(self.metrics[f'missing_{col}s'].index)
             self.metrics[f'missing_{col}s'] = np.unique(self.metrics[f'missing_{col}s'].values)
@@ -317,3 +317,187 @@ class BicknellTask(EvaluationTask):
             f.write(header)
             f.write(mv_report)
             f.write(fin_report)
+
+
+class GS2013Task(EvaluationTask):
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name):
+        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name)
+        self.gs = pd.read_csv(os.path.join(SRC_DIR, 'evaluation/task_data/GS2013.csv'))
+        # Don't copy it yet, because we need some preprocessing on the original data...
+        self.gs_ids = None
+        self.word_cols = ['subject', 'base_verb', 'object', 'landmark_verb']
+
+    def _preprocess(self) -> Dict[str, Dict[str, np.ndarray]]:
+        """
+        Because we have two inputs for each sample in GS
+        (the base verb, and landmark verb). we will return
+        as two separate inputs we pass into the model...
+        :return: A dictionary with 'base_verb_input' and 'landmark_verb_input'
+        that is regular input for the base verbs and landmark verbs.
+        """
+        # First thing, we have data from 50 participants. Average the
+        # scores for all 50 for each sample...
+        # Group the data by the words...
+        grouped = self.gs.groupby(by=self.word_cols + ['hilo'])
+        # Call mean(), and reset the index so the groups turn into the index like before
+        self.gs = grouped.mean().reset_index()
+        # We don't need the id column anymore...
+        self.gs.drop(columns=['id'], inplace=True)
+        self.gs_ids = self.gs.copy()
+        # Now convert the words to IDs...
+        word_to_id = lambda word: self.hp_set.word_vocabulary.get(word, self.hp_set.missing_word_id)
+        for col in self.word_cols:
+            self.gs_ids[col] = self.gs_ids[col].apply(word_to_id)
+        # Now to actually create the input arrays...The input words will be the only
+        # thing that differs between the two sets of input...
+        input_roles = np.repeat(np.arange(6, dtype=int)[np.newaxis, :], repeats=self.gs.shape[0], axis=0)
+        base_verb_words = np.full(shape=(self.gs.shape[0], 6), fill_value=self.hp_set.missing_word_id, dtype=int)
+        # Get the corresponding columns. We use the A0, V, and A1 as the roles...
+        subject_id = self.hp_set.role_vocabulary['A0']
+        verb_id = self.hp_set.role_vocabulary['V']
+        object_id = self.hp_set.role_vocabulary['A1']
+        # Set the values in the base_verb_words to their corresponding values. Copy and set the
+        # landmark verbs...
+        base_verb_words[:, subject_id] = self.gs_ids['subject'].values
+        base_verb_words[:, verb_id] = self.gs_ids['base_verb'].values
+        base_verb_words[:, object_id] = self.gs_ids['object'].values
+
+        landmark_verb_words = base_verb_words.copy()
+        landmark_verb_words[:, verb_id] = self.gs_ids['landmark_verb'].values
+
+        # The target word and role can be whatever, since we are not predicting
+        # anything, jsut looking at the embeddings...
+        target_role = np.full(shape=(self.gs.shape[0], 1), fill_value=0, dtype=int)
+        target_word = np.full(shape=(self.gs.shape[0], 1), fill_value=1729, dtype=int)
+
+        return {
+            'base_verb_input': {
+                'input_roles': input_roles,
+                'input_words': base_verb_words,
+                'target_role': target_role,
+                'target_word': target_word
+            },
+            'landmark_verb_input': {
+                'input_roles': input_roles,
+                'input_words': landmark_verb_words,
+                'target_role': target_role,
+                'target_word': target_word
+            }
+        }
+
+    def _calc_score(self, base_out, land_out):
+        """
+        Given the base verb context, and landmark context, we run
+        a cosine similarity between all the context embedding pairs.
+        We can then update the dataset with this info...
+        :param base_out: The context embedding associated with the base verbs
+        :param land_out: The context embedding associated with the landmark verbs
+        :return:
+        """
+        # Cosine similarity is just cosine of the angle between the vectors
+        # i.e. dot product divided by product of magnitudes..
+        # For vectorized row-wise dot product, use einsum...
+        dot_products = np.einsum('ij,ij->i', base_out, land_out)
+        mag_products = np.linalg.norm(base_out, axis=1) * np.linalg.norm(land_out, axis=1)
+        cosine_similarities = dot_products / mag_products
+        # Order was preserved when we converted to numpy arrays, so just append the column...
+        self.gs['cosine'] = cosine_similarities
+
+        # Missing words... (subjects, base verbs, objects, landmark verbs)
+        for col in self.word_cols:
+            self.metrics[f'missing_{col}s'] = self.gs[col][self.gs_ids[col] == self.hp_set.missing_word_id]
+        # Union the index of the 4 columns to find the total missing #
+        # and unique the missing words...
+        total_missing_index = self.metrics['missing_subjects'].index
+        self.metrics['missing_subjects'] = np.unique(self.metrics['missing_subjects'].values)
+        for col in ['base_verb', 'object', 'landmark_verb']:
+            total_missing_index = total_missing_index.union(self.metrics[f'missing_{col}s'].index)
+            self.metrics[f'missing_{col}s'] = np.unique(self.metrics[f'missing_{col}s'].values)
+        self.metrics['missing_n'] = len(total_missing_index)
+
+        self.gs_dropped = self.gs.drop(index=total_missing_index)
+        # Put metrics for dropped dataset...
+        rho, p = spearmanr(self.gs_dropped['score'], self.gs_dropped['cosine'])
+        self.metrics['rho_m'] = rho
+        self.metrics['p_m'] = p
+        # Also correlate with LOW and HIGH samples...
+        lows = self.gs_dropped[self.gs_dropped['hilo'] == 'LOW']
+        highs = self.gs_dropped[self.gs_dropped['hilo'] == 'HIGH']
+        rho, p = spearmanr(lows['score'], lows['cosine'])
+        self.metrics['low_rho_m'] = rho
+        self.metrics['low_p_m'] = p
+        rho, p = spearmanr(highs['score'], highs['cosine'])
+        self.metrics['high_rho_m'] = rho
+        self.metrics['high_p_m'] = p
+
+        # We correlate the scores with the similariites
+        rho, p = spearmanr(self.gs['score'], self.gs['cosine'])
+        self.metrics['rho'] = rho
+        self.metrics['p'] = p
+        # Also correlate with LOW and HIGH samples...
+        lows = self.gs[self.gs['hilo'] == 'LOW']
+        highs = self.gs[self.gs['hilo'] == 'HIGH']
+        rho, p = spearmanr(lows['score'], lows['cosine'])
+        self.metrics['low_rho'] = rho
+        self.metrics['low_p'] = p
+        rho, p = spearmanr(highs['score'], highs['cosine'])
+        self.metrics['high_rho'] = rho
+        self.metrics['high_p'] = p
+
+    def _generate_report(self):
+        """
+        Nothing different here, just the normal report...
+        :return:
+        """
+        os.makedirs(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'evaluation_results'), exist_ok=True)
+        # Short helper method to draw a box around a piece of text given padding...
+        make_box = lambda text, spaces: f"╔{'=' * (len(text) + 2 * spaces)}╗\n║{' ' * spaces}{text}{' ' * spaces}║\n" \
+                                        f"╚{'=' * (len(text) + 2 * spaces)}╝\n"
+        # Make the header
+        header = make_box('GS RESULTS', 12) + '\n'
+
+        # Missing word label...
+        mv_report = make_box('MISSING WORD REPORT', 4)
+        mv_report += f'The breakdown of missing words are as follows:\n'
+        for col in self.word_cols:
+            mv_report += f"  - {len(self.metrics[f'missing_{col}s'])} {col}s\n"
+        mv_report += f"This contributes to a total of {self.metrics['missing_n']} missing samples.\n\n"
+        # Now for the actual words that are missing...
+        for col in self.word_cols:
+            if len(self.metrics[f'missing_{col}s']) > 0:
+                mv_report += f"MISSING {col.upper()}S\n" \
+                             f"{'=' * len(max(self.metrics[f'missing_{col}s'], key=lambda x: len(x)))}\n"
+                mv_report += '\n'.join(self.metrics[f'missing_{col}s']) + '\n\n'
+
+        # Report spearman correlation total, low, and high for both full dataset
+        # and missing data...
+        fin_report = make_box('FINAL SPEARMAN CORRELATIONS', 6) + '\n'
+        fin_report += f"ENTIRE DATASET ({self.gs.shape[0]}): {self.metrics['rho'] * 100:.3f}%, " \
+                      f"P-value of {self.metrics['p']:.6f}\n"
+        fin_report += f"  - LOW DATASET ({self.gs[self.gs['hilo'] == 'LOW'].shape[0]}): " \
+                      f"{self.metrics['low_rho'] * 100:.3f}%, P-value of {self.metrics['low_p']:.6f}\n"
+        fin_report += f"  - HIGH DATASET ({self.gs[self.gs['hilo'] == 'HIGH'].shape[0]}):" \
+                      f" {self.metrics['high_rho'] * 100:.3f}%, P-value of {self.metrics['high_p']:.6f}\n\n"
+        fin_report += f"MISSING REMOVED ({self.gs_dropped.shape[0]}): {self.metrics['rho_m'] * 100:.3f}%, " \
+                      f"P-value of {self.metrics['p_m']:.6f}\n"
+        fin_report += f"  - LOW DATASET ({self.gs_dropped[self.gs_dropped['hilo'] == 'LOW'].shape[0]}): " \
+                      f"{self.metrics['low_rho_m'] * 100:.3f}%, P-value of {self.metrics['low_p_m']:.6f}\n"
+        fin_report += f"  - HIGH DATASET ({self.gs_dropped[self.gs_dropped['hilo'] == 'HIGH'].shape[0]}): " \
+                      f"{self.metrics['high_rho_m'] * 100:.3f}%, P-value of {self.metrics['high_p_m']:.6f}\n"
+        with open(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'evaluation_results', 'gs.txt'),
+                  'w', encoding='utf-8') as f:
+            f.write(header)
+            f.write(mv_report)
+            f.write(fin_report)
+
+    def run_task(self):
+        """
+        We need to override the run_task because the output is different than
+        normal
+        :return:
+        """
+        all_inputs = self._preprocess()
+        base_context = self.model(all_inputs['base_verb_input'], get_embedding=True)
+        landmark_context = self.model(all_inputs['landmark_verb_input'], get_embedding=True)
+        self._calc_score(base_context, landmark_context)
+        self._generate_report()

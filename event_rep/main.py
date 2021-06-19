@@ -26,7 +26,7 @@ from model_implementation.architecture.models import *
 from model_implementation.core.batcher import WordRoleWriter
 from model_implementation.core.roles import *
 from model_implementation.core.callbacks import MetricCallback
-from evaluation.tasks import CorrelateTFScores, BicknellTask
+from evaluation.tasks import CorrelateTFScores, BicknellTask, GS2013Task
 
 # Directory locations
 # The absolute path where main is being run. Should end in RW-Eng-v3-src/event_rep
@@ -156,6 +156,8 @@ def run_thematic_evaluation(tasks: list, model, experiment):
         print(f'Running {task}...')
         if task == 'bicknell':
             evaluator = BicknellTask(SRC_DIR, EXPERIMENT_DIR, model, experiment)
+        elif task == 'gs':
+            evaluator = GS2013Task(SRC_DIR, EXPERIMENT_DIR, model, experiment)
         else:
             evaluator = CorrelateTFScores(SRC_DIR, EXPERIMENT_DIR, model, experiment, task)
         evaluator.run_task()
@@ -238,7 +240,8 @@ if __name__ == '__main__':
                                  'tasks. In this way it differs from do_eval, which allows for both training '
                                  'and evaluation in the same program run.')
     eval_task_group = parser.add_mutually_exclusive_group()
-    eval_task_group.add_argument('--evaluation_tasks', choices=['pado', 'mcrae', 'greenberg', 'bicknell'], nargs='*', default=None,
+    eval_task_group.add_argument('--evaluation_tasks', choices=['pado', 'mcrae', 'greenberg', 'bicknell', 'gs'],
+                                 nargs='*', default=None,
                                  help='The specific evaluation tasks to run. Must specify at least one.')
     eval_task_group.add_argument('--run_all_tasks', action='store_true', default=False,
                                  help='If specified, runs ALL thematic fit evaluation tasks.')

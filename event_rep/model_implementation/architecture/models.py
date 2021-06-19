@@ -99,7 +99,7 @@ class MTRFv4Res(Model):
         self.target_word_output = Dense(self.hp_set.word_vocab_count, activation='softmax', name='word_output')
         self.target_role_output = Dense(self.hp_set.role_vocab_count, activation='softmax', name='role_output')
 
-    def call(self, inputs, training=None, mask=None):
+    def call(self, inputs, training=None, mask=None, get_embedding=False):
         # WE ASSUME THAT THE INPUTS ARE PASSED IN AS DICTIONARIES WITH THE KEYS:
         # [input_words, input_roles, target_word, target_role]
         # Though of course, when the Model is defined and data is fed through, it is much easier
@@ -127,6 +127,8 @@ class MTRFv4Res(Model):
             self.lin_proj2(self.prelu(self.lin_proj1(total_embeddings)))
         ])
         context_embedding = self.average_across_input(residual)
+        if get_embedding:
+            return context_embedding
         # Create target role and word embeddings multiplied with the context.
         # Note the crossing of inputs into the other's hidden layer.
         twh_out = self.target_word_hidden([

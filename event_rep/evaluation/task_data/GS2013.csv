@@ -1,4 +1,4 @@
-id,verb,subject,object,landmark,input,hilo
+id,subject,base_verb,object,landmark_verb,score,hilo
 1,table,draw,eye,depict,1,LOW
 1,table,draw,eye,attract,7,HIGH
 1,system,meet,criterion,visit,5,HIGH
