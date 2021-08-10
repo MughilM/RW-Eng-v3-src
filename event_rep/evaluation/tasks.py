@@ -101,6 +101,7 @@ class CorrelateTFScores(EvaluationTask):
         ROLE_MAP = {
             'subj': 'A0',
             'obj': 'A1',
+            'bene': 'A2',
             'instrument': 'AM-MNR',
             'location': 'AM-LOC'
         }
@@ -112,21 +113,27 @@ class CorrelateTFScores(EvaluationTask):
         # Doing both columns will not work, as we will run into the Series hash issue.
         self.dataset_ids['verb'] = self.dataset_ids['verb'].apply(word_to_id)
         self.dataset_ids['noun'] = self.dataset_ids['noun'].apply(word_to_id)
-        # Convert our role column to role IDs, using the ROLE_MAP and the role vocabulary
+        # Convert our role column to role IDs, using the ROLE_MAP and the role vocabulary.
+        # If the model was NOT TRAINED ON the A2 beneficiary role, then we must replace
+        # A2 with <OTHER>, so the mapping doesn't error out on encounter.
         self.dataset_ids['role'] = self.dataset_ids['role'].\
-            apply(lambda role: self.hp_set.role_vocabulary[ROLE_MAP[role]])
+            apply(lambda role: self.hp_set.role_vocabulary.get(ROLE_MAP[role], self.hp_set.role_vocabulary['<OTHER>']))
         # Now we have our inputs in terms of IDs, and we can make the metrics.
-        # The important thing is that even though we only have 1 input word (the verb), the
-        # order must be preserved. To keep things simple, each input_role sample
-        # will be [0, 1, 2, 3, 4, 5]. Using the role vocabulary, we can get what
-        # ID the verb maps, and adjust that column.
-        input_roles = np.repeat(np.arange(6, dtype=int)[np.newaxis, :], repeats=self.dataset.shape[0], axis=0)
+        # The important thing is that we need to emulate how we trained the model. There,
+        # given N roles, each sample had N - 1 input roles, with one removed for the target role.
+        # In correlation, our target role is given by the role column. Therefore, this role MUST
+        # NOT BE PRESENT in the input roles row.
+        input_roles = np.repeat(np.arange(self.hp_set.role_vocab_count, dtype=int)[np.newaxis, :],
+                                repeats=self.dataset.shape[0], axis=0)
+        # From the full vocab set, figure out which ones to remove based on our 'role' column values
+        target_role_indices = self.hp_set.role_vocab_count * np.arange(input_roles.shape[0]) + self.dataset_ids['role']
+        # After dropping, the matrix flattens, reshape it...
+        input_roles = np.delete(input_roles, target_role_indices).reshape((-1, self.hp_set.role_vocab_count - 1))
         # First make the input_words be filled with missing words...
         input_words = np.full(shape=(self.dataset.shape[0], 6), fill_value=self.hp_set.missing_word_id, dtype=int)
-        # This column will not change
-        verb_id = self.hp_set.role_vocabulary['V']
-        # Change that column in input_words...
-        input_words[:, verb_id] = self.dataset_ids['verb'].values
+        # Get the location in each row which corresponds to V (because one role is missing in each row,
+        # the column will change in each row) and set them to the verb word IDs.
+        input_words[np.where(input_roles == self.hp_set.role_vocabulary['V'])] = self.dataset_ids['verb'].values
         # Next, the target role is the role column...needs to have 1 column
         target_role = self.dataset_ids['role'].values[:, np.newaxis]
         # The target word doesn't matter, because we aren't worried about the predicted roles.
