@@ -83,7 +83,7 @@ def train_test_eval(model_name,
                     test_dataset: tf.data.Dataset,
                     load_previous: bool):
     # Make the model object!
-    model: MTRFv4Res = PARAM_TO_MODEL[model_name](hp_set)
+    model: MTRFv4Res = PARAM_TO_MODEL[model_name](hp_set, pretrained_emb_dir=PRETRAINED_DIR)
     logging.info('Clean model summary:')
     # Extra parentheses for build() because input_shapes are not required.
     model.build().summary()
