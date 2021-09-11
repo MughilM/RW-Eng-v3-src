@@ -12,7 +12,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import *
-from tensorflow.keras.initializers import glorot_uniform
+from tensorflow.keras.initializers import glorot_uniform, constant
 import tensorflow.keras.backend as K
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
 
@@ -273,7 +273,7 @@ class MTRFv4Res(Model):
         # Make the embedding layer and return it, and we are done!
         return Embedding(input_dim=self.hp_set.word_vocab_count,
                          output_dim=self.hp_set.word_embedding_dimension,
-                         embeddings_initializer=full_embedding_matrix,
+                         embeddings_initializer=constant(full_embedding_matrix),
                          name=layer_name,
                          trainable=not self.hp_set.freeze_word_embeddings)
 
