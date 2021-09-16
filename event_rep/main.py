@@ -124,9 +124,9 @@ def train_test_eval(model_name,
                                    save_best_only=True,
                                    verbose=0,
                                    save_weights_only=True)
-    stopper = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=2, verbose=1)
+    stopper = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=5, verbose=1)
     nanChecker = TerminateOnNaN()
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=2, min_lr=1e-3)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=5, min_lr=1e-3)
     metric_callback = MetricCallback(model_odj=model, save_dir=model_artifact_dir, save_freq=1,
                                      past_metrics=past_metrics)
 
