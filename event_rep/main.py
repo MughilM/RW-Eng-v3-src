@@ -298,7 +298,7 @@ if __name__ == '__main__':
     # Run the evaluation if one of the parameters is specified
     if args.do_eval or args.eval_only:
         if args.run_all_tasks:
-            run_thematic_evaluation(['pado', 'mcrae', 'greenberg'])
+            run_thematic_evaluation(['pado', 'mcrae', 'greenberg', 'bicknell', 'gs'], args.model_name, experiment_name)
         else:
             run_thematic_evaluation(args.evaluation_tasks, args.model_name, experiment_name)
 
