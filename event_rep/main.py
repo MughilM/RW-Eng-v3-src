@@ -24,9 +24,12 @@ from tensorflow.keras.optimizers import Adam
 
 from model_implementation.architecture.models import *
 from model_implementation.core.batcher import WordRoleWriter
+from model_implementation.core.color_logging import ColorHandler
 from model_implementation.core.roles import *
 from model_implementation.core.callbacks import MetricCallback
 from evaluation.tasks import CorrelateTFScores, BicknellTask, GS2013Task
+
+logger = logging.getLogger(__name__)
 
 # Directory locations
 # The absolute path where main is being run. Should end in RW-Eng-v3-src/event_rep
@@ -84,7 +87,7 @@ def train_test_eval(model_name,
                     load_previous: bool):
     # Make the model object!
     model: MTRFv4Res = PARAM_TO_MODEL[model_name](hp_set, pretrained_emb_dir=PRETRAINED_DIR)
-    logging.info('Clean model summary:')
+    logger.info('Clean model summary:')
     # Extra parentheses for build() because input_shapes are not required.
     model.build().summary()
     # Same model image to experiment directory.
@@ -96,13 +99,13 @@ def train_test_eval(model_name,
     initial_epoch = 0
     if os.path.exists(model_artifact_dir):
         if load_previous:
-            logging.info(f'Attempting to continue train from a checkpoint at {checkpoint_dir}...')
+            logger.info(f'Attempting to continue train from a checkpoint at {checkpoint_dir}...')
             if not os.path.exists(checkpoint_dir):
-                logging.error('No checkpoints present! Quitting...')
+                logger.error('No checkpoints present! Quitting...')
                 sys.exit(1)
             # TODO: Add reading from a description/metrics file...
             latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
-            logging.info(f'Found latest checkpoint {latest_checkpoint}! Loading weights...')
+            logger.info(f'Found latest checkpoint {latest_checkpoint}! Loading weights...')
             model.load_weights(latest_checkpoint)
             with open(os.path.join(model_artifact_dir, 'metrics.json'), 'r') as f:
                 past_metrics = json.load(f)
@@ -128,37 +131,37 @@ def train_test_eval(model_name,
                                      past_metrics=past_metrics)
 
     total_time_start = datetime.datetime.now(datetime.timezone.utc)
-    logging.info(f'TRAINING STARTED AT {total_time_start} UTC...')
+    logger.info(f'TRAINING STARTED AT {total_time_start} UTC...')
 
     # COMPILE AND FIT OUR MODEL!
     model.compile(optimizer=Adam(learning_rate=0.01), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     model.fit(x=train_dataset,
               epochs=initial_epoch + args.epochs,
               workers=1,
-              verbose=1,
+              verbose=2,
               initial_epoch=initial_epoch,
               validation_data=vali_dataset,
               callbacks=[checkpointer, stopper, nanChecker, reduce_lr, metric_callback])
 
     # Report time taken, and metrics on the testing dataset...
     end_time = datetime.datetime.now(datetime.timezone.utc)
-    print(f'TRAINING ENDED AT {end_time} UTC...')
+    logger.info(f'TRAINING ENDED AT {end_time} UTC...')
 
     # For testing, we need to load the latest checkpoint,
     latest = tf.train.latest_checkpoint(checkpoint_dir)
-    print(f'Testing with latest checkpoint: {latest}')
+    logger.info(f'Testing with latest checkpoint: {latest}')
     model.load_weights(latest)
-    model.evaluate(test_dataset, workers=1)
-    print('Testing done. To resume training, please use the checkpoint directory.')
-    print(f'EXPERIMENT AND HYPERPARAMETERS SAVED AT {model_artifact_dir}.\n')
+    model.evaluate(test_dataset, workers=2)
+    logger.info('Testing done. To resume training, please use the checkpoint directory.')
+    logger.info(f'EXPERIMENT AND HYPERPARAMETERS SAVED AT {model_artifact_dir}.\n')
 
     return model, model_artifact_dir
 
 
 def run_thematic_evaluation(tasks: list, model, experiment):
-    print(f'Evaluation Tasks to run: {tasks}')
+    logger.info(f'Evaluation Tasks to run: {tasks}')
     for task in tasks:
-        print(f'Running {task}...')
+        logger.info(f'Running {task}...')
         if task == 'bicknell':
             evaluator = BicknellTask(SRC_DIR, EXPERIMENT_DIR, model, experiment)
         elif task == 'gs':
@@ -300,5 +303,5 @@ if __name__ == '__main__':
             run_thematic_evaluation(args.evaluation_tasks, args.model_name, experiment_name)
 
     end_time = datetime.datetime.now(datetime.timezone.utc)
-    print(f'PROGRAM ENDED AT {end_time} UTC...')
-    print(f'TOTAL TIME: {str(end_time - total_time_start)}\n')
+    logger.info(f'PROGRAM ENDED AT {end_time} UTC...')
+    logger.info(f'TOTAL TIME: {str(end_time - total_time_start)}\n')

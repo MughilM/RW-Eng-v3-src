@@ -13,6 +13,9 @@ import os
 from typing import Dict, Type
 from model_implementation.architecture.models import *
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class EvaluationTask:
@@ -35,7 +38,7 @@ class EvaluationTask:
         self.hp_set = HyperparameterSet(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'hyperparameters.json'))
         # Load the model using the hyperparameters
         self.model: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.hp_set)
-        print(f'Loaded model and hyperparameters from {os.path.join(self.EXPERIMENT_DIR, self.experiment_name)}')
+        logger.info(f'Loaded model and hyperparameters from {os.path.join(self.EXPERIMENT_DIR, self.experiment_name)}')
         # This should be used to save any metrics, that can later be written in
         # the generate report method.
         self.metrics = {}
@@ -201,12 +204,13 @@ class CorrelateTFScores(EvaluationTask):
                       f"P-value of {self.metrics['p']:.6f}\n"
         fin_report += f"MISSING REMOVED ({self.dataset_dropped.shape[0]}): {self.metrics['rho_m'] * 100:.3f}%, " \
                       f"P-value of {self.metrics['p_m']:.6f}"
-        with open(os.path.join(self.EXPERIMENT_DIR, self.experiment_name,
-                               'evaluation_results', f'{self.dataset_name}.txt'),
-                  'w', encoding='utf-8') as f:
+        output_file_path = os.path.join(self.EXPERIMENT_DIR, self.experiment_name,
+                                        'evaluation_results', f'{self.dataset_name}.txt')
+        with open(output_file_path,'w', encoding='utf-8') as f:
             f.write(header)
             f.write(mv_report)
             f.write(fin_report)
+        logger.info(f"Evaluation finished! Results saved to {output_file_path}")
 
 
 class BicknellTask(EvaluationTask):
@@ -319,12 +323,13 @@ class BicknellTask(EvaluationTask):
         fin_report += f"MISSING REMOVED ({self.dataset_dropped.shape[0]}): {self.metrics['num_correct_m']} / " \
                       f"{self.dataset_dropped.shape[0]} = {self.metrics['accuracy_m'] * 100:.3f}%"
         # Write to the file
-        with open(os.path.join(self.EXPERIMENT_DIR, self.experiment_name,
-                               'evaluation_results', f'{self.dataset_name}.txt'),
-                  'w', encoding='utf-8') as f:
+        output_file_path = os.path.join(self.EXPERIMENT_DIR, self.experiment_name,
+                                        'evaluation_results', f'{self.dataset_name}.txt')
+        with open(output_file_path, 'w', encoding='utf-8') as f:
             f.write(header)
             f.write(mv_report)
             f.write(fin_report)
+        logger.info(f'Bicknell evaluation finished. Results saved to {output_file_path}.')
 
 
 class GS2013Task(EvaluationTask):
@@ -492,11 +497,13 @@ class GS2013Task(EvaluationTask):
                       f"{self.metrics['low_rho_m'] * 100:.3f}%, P-value of {self.metrics['low_p_m']:.6f}\n"
         fin_report += f"  - HIGH DATASET ({self.gs_dropped[self.gs_dropped['hilo'] == 'HIGH'].shape[0]}): " \
                       f"{self.metrics['high_rho_m'] * 100:.3f}%, P-value of {self.metrics['high_p_m']:.6f}\n"
-        with open(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'evaluation_results', 'gs.txt'),
-                  'w', encoding='utf-8') as f:
+        output_file_path = os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'evaluation_results', 'gs.txt')
+        with open(output_file_path, 'w', encoding='utf-8') as f:
             f.write(header)
             f.write(mv_report)
             f.write(fin_report)
+        logger.info(f'GS2013 evaluation finished. Results saved to {output_file_path}.')
+
 
     def run_task(self):
         """
