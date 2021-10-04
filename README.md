@@ -2,6 +2,16 @@
 
 This repository holds extended research of a thematic fit model that has been trained using a multi-task residual role-filler approach. 
 
+## MODEL-SUBCLASS BRANCH
+The `model-subclass` branch holds implementation of our models where we subclass the Tensorflow `Model` object in
+order to create the models. Doing it this way allows us to access `.fit()` and `.evaluate()` directly on the Model.
+However, when doing it this way using multiple inputs and multiple outputs like our model has, it led to training issues
+where validation performance degraded each epoch. Only when I removed the sublcass and implemented a `build_model()`
+function instead did training occur as normal. In about a week time frame, we asked a question regarding this on
+StackOverflow. That question can be seen [here](https://stackoverflow.com/questions/69285578/validation-test-worse-metrics-with-multi-input-output-tensorflow-model-subclass).
+No response happened, and so we moved this implementation into another branch. If time permits and we get a fix,
+then maybe we will update the `main` branch with the subclass. For now, this stays here.
+
 ## Key Dependencies
 
 - **Tested OS:** Ubuntu 18.04, Windows
