@@ -28,9 +28,17 @@ import requests
 import logging
 
 
-class MTRFv4Res(Model):
-    def __init__(self, hp_set: HyperparameterSet, pretrained_emb_dir=None, **kwargs):
-        super(MTRFv4Res, self).__init__(**kwargs)
+class BaseModel:
+    def __init__(self):
+        pass
+
+    def build_model(self, training=True, get_embedding=False):
+        raise NotImplementedError('Please implement a way to build your model using layers defined in __init__')
+
+
+class MTRFv4Res(BaseModel):
+    def __init__(self, hp_set: HyperparameterSet, pretrained_emb_dir=None):
+        super().__init__()
         self.hp_set = hp_set
         self.PRETRAINED_DIR = pretrained_emb_dir
         self.logger = logging.getLogger(__name__)
@@ -39,6 +47,13 @@ class MTRFv4Res(Model):
         self.input_roles = Input(shape=(self.hp_set.role_vocab_count - 1), dtype=tf.uint32, name='input_roles')
         self.target_word = Input(shape=(1,), dtype=tf.uint32, name='target_word')
         self.target_role = Input(shape=(1,), dtype=tf.uint32, name='target_role')
+        # Dictionary of inputs. Used when building the model object
+        self.input_dict = {
+            'input_words': self.input_words,
+            'input_roles': self.input_roles,
+            'target_word': self.target_word,
+            'target_role': self.target_role
+        }
         # Add the embedding layers for the input words and roles
         self.word_embedding = self.get_embedding()
         self.role_embedding = Embedding(input_dim=self.hp_set.role_vocab_count,
@@ -96,27 +111,35 @@ class MTRFv4Res(Model):
         self.target_role_hidden = Multiply(name='cont_x_twe')  # target WORD embedding for target role hidden
 
         ### FINALLY THE OUTPUTS
-        # The reason the activation is separated is because it makes it easy
-        # to NOT USE THE BIAS during the evaluation tasks.
-        self.target_word_output_raw = Dense(self.hp_set.word_vocab_count, name='word_output_raw')
-        self.target_role_output_raw = Dense(self.hp_set.role_vocab_count, name='role_output_raw')
-        self.target_word_act = Activation('softmax', name='word_output_act')
-        self.target_role_act = Activation('softmax', name='role_output_act')
+        # Create two layers, with the same name. One uses the bias, one doesn't.
+        # When building the model for training, the one with bias is used, and during
+        # evaluation, the one without is.
+        self.target_word_output = Dense(self.hp_set.word_vocab_count, name='w_out', activation='softmax')
+        self.target_role_output = Dense(self.hp_set.role_vocab_count, name='r_out', activation='softmax')
+        # No bias
+        self.target_word_output_no_bias = Dense(self.hp_set.word_vocab_count, name='w_out',
+                                                activation='softmax', use_bias=False)
+        self.target_role_output_no_bias = Dense(self.hp_set.role_vocab_count, name='r_out',
+                                                activation='softmax', use_bias=False)
+        # self.target_word_output_raw = Dense(self.hp_set.word_vocab_count, name='word_output_raw')
+        # self.target_role_output_raw = Dense(self.hp_set.role_vocab_count, name='role_output_raw')
+        # self.target_word_act = Activation('softmax', name='w_out')
+        # self.target_role_act = Activation('softmax', name='r_out')
 
-    def call(self, inputs, training=True, mask=None, get_embedding=False):
+    def build_model(self, training=True, get_embedding=False):
         # WE ASSUME THAT THE INPUTS ARE PASSED IN AS DICTIONARIES WITH THE KEYS:
         # [input_words, input_roles, target_word, target_role]
         # Though of course, when the Model is defined and data is fed through, it is much easier
         # to simply provide a tf.dataset where the input layer names map properly...
         # input_words, input_roles, target_word, target_role = inputs[0], inputs[1], inputs[2], inputs[3]
-        input_words, input_roles, target_word, target_role = inputs['input_words'], inputs['input_roles'], \
-                                                             inputs['target_word'], inputs['target_role']
+        # input_words, input_roles, target_word, target_role = inputs['input_words'], inputs['input_roles'], \
+        #                                                      inputs['target_word'], inputs['target_role']
         # Pass inputs through embedding...
-        word_embedding_out = self.word_embedding(input_words)
-        role_embedding_out = self.role_embedding(input_roles)
+        word_embedding_out = self.word_embedding(self.input_words)
+        role_embedding_out = self.role_embedding(self.input_roles)
         # Now zero out the missing word embeddings if need be.
         if self.hp_set.zero_out_miss_embedding:
-            mask = self.embedding_mask(input_words)
+            mask = self.embedding_mask(self.input_words)
             # Update the embeddings
             word_embedding_out = self.word_embed_multi([word_embedding_out, mask])
         # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...
@@ -132,43 +155,30 @@ class MTRFv4Res(Model):
         ])
         context_embedding = self.average_across_input(residual)
         if get_embedding:
-            return context_embedding
+            return Model(inputs=self.input_dict,
+                         outputs={'context_embedding': context_embedding})
         # Create target role and word embeddings multiplied with the context.
         # Note the crossing of inputs into the other's hidden layer.
         twh_out = self.target_word_hidden([
             self.weight_context_word(context_embedding),
-            self.target_role_flatten(self.target_role_drop(self.target_role_embedding(target_role)))
+            self.target_role_flatten(self.target_role_drop(self.target_role_embedding(self.target_role)))
         ])
         trh_out = self.target_role_hidden([
             self.weight_context_role(context_embedding),
-            self.target_word_flatten(self.target_word_drop(self.target_word_embedding(target_word)))
+            self.target_word_flatten(self.target_word_drop(self.target_word_embedding(self.target_word)))
         ])
         # Forward through the output layers.
         # If training is False, then DO NOT USE THE BIAS IN THE OUTPUT LAYERS...
         if not training:
-            tw_out_raw = tf.tensordot(twh_out, self.target_word_output_raw.weights[0], axes=1)
-            tr_out_raw = tf.tensordot(trh_out, self.target_role_output_raw.weights[0], axes=1)
+            tw_out = self.target_word_output_no_bias(twh_out)
+            tr_out = self.target_role_output_no_bias(trh_out)
         else:
-            tw_out_raw = self.target_word_output_raw(twh_out)
-            tr_out_raw = self.target_role_output_raw(trh_out)
-        tw_out = self.target_word_act(tw_out_raw)
-        tr_out = self.target_role_act(tr_out_raw)
-        return {'w_out': tw_out, 'r_out': tr_out}
-
-    def build(self, input_shapes=None):
-        """
-        This differs from the normal build because input_shapes is not required,
-        since the class defines the input layers in-house. But the parameter has
-        to stay, otherwise model.fit, evaluate, etc. would cause errors.
-        :param input_shapes: The input_shapes. NOT USED, but used by model.fit() during training,
-        so removing would cause errors.
-        :return: Model object with inputs and outputs defined.
-        """
-        input_list = {'input_words': self.input_words,
-                      'input_roles': self.input_roles,
-                      'target_word': self.target_word,
-                      'target_role': self.target_role}
-        return Model(inputs=input_list, outputs=self.call(input_list))
+            tw_out = self.target_word_output(twh_out)
+            tr_out = self.target_role_output(trh_out)
+        # tw_out = self.target_word_act(tw_out_raw)
+        # tr_out = self.target_role_act(tr_out_raw)
+        return Model(inputs=self.input_dict,
+                     outputs={'w_out': tw_out, 'r_out': tr_out})
 
     def get_embedding(self):
         """
@@ -302,15 +312,15 @@ class MTRFv5Res(MTRFv4Res):
         self.weight_context_role = Dense(self.hp_set.word_embedding_dimension, activation='linear', use_bias=False,
                                          name='weighted_context_role')
 
-    def call(self, inputs, training=True, mask=None, get_embedding=False):
-        input_words, input_roles, target_word, target_role = inputs['input_words'], inputs['input_roles'], \
-                                                             inputs['target_word'], inputs['target_role']
+    def build_model(self, training=True, get_embedding=False):
+        # input_words, input_roles, target_word, target_role = inputs['input_words'], inputs['input_roles'], \
+        #                                                      inputs['target_word'], inputs['target_role']
         # Pass inputs through embedding...
-        word_embedding_out = self.word_embedding(input_words)
-        role_embedding_out = self.role_embedding(input_roles)
+        word_embedding_out = self.word_embedding(self.input_words)
+        role_embedding_out = self.role_embedding(self.input_roles)
         # Now zero out the missing word embeddings if need be.
         if self.hp_set.zero_out_miss_embedding:
-            mask = self.embedding_mask(input_words)
+            mask = self.embedding_mask(self.input_words)
             # Update the embeddings
             word_embedding_out = self.word_embed_multi([word_embedding_out, mask])
         # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...
@@ -326,27 +336,29 @@ class MTRFv5Res(MTRFv4Res):
         ])
         context_embedding = self.average_across_input(residual)
         if get_embedding:
-            return context_embedding
+            return Model(inputs=self.input_dict,
+                         outputs={'context_embedding': context_embedding})
         # Create target role and word embeddings multiplied with the context.
         # Note the crossing of inputs into the other's hidden layer.
         ###### THE CHANGE IS HERE! INSTEAD OF USING target_word/role_embedding,
         ###### we use word/role embedding...The flattening stands...
         twh_out = self.target_word_hidden([
             self.weight_context_word(context_embedding),
-            self.target_role_flatten(self.target_role_drop(self.role_embedding(target_role)))
+            self.target_role_flatten(self.target_role_drop(self.role_embedding(self.target_role)))
         ])
         trh_out = self.target_role_hidden([
             self.weight_context_role(context_embedding),
-            self.target_word_flatten(self.target_word_drop(self.word_embedding(target_word)))
+            self.target_word_flatten(self.target_word_drop(self.word_embedding(self.target_word)))
         ])
         # Forward through the output layers.
         # If training is False, then DO NOT USE THE BIAS IN THE OUTPUT LAYERS...
         if not training:
-            tw_out_raw = tf.tensordot(twh_out, self.target_word_output_raw.weights[0], axes=1)
-            tr_out_raw = tf.tensordot(trh_out, self.target_role_output_raw.weights[0], axes=1)
+            tw_out = self.target_word_output_no_bias(twh_out)
+            tr_out = self.target_role_output_no_bias(trh_out)
         else:
-            tw_out_raw = self.target_word_output_raw(twh_out)
-            tr_out_raw = self.target_role_output_raw(trh_out)
-        tw_out = self.target_word_act(tw_out_raw)
-        tr_out = self.target_role_act(tr_out_raw)
-        return {'w_out': tw_out, 'r_out': tr_out}
+            tw_out = self.target_word_output(twh_out)
+            tr_out = self.target_role_output(trh_out)
+        # tw_out = self.target_word_act(tw_out_raw)
+        # tr_out = self.target_role_act(tr_out_raw)
+        return Model(inputs=self.input_dict,
+                     outputs={'w_out': tw_out, 'r_out': tr_out})

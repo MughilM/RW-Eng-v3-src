@@ -86,10 +86,11 @@ def train_test_eval(model_name,
                     test_dataset: tf.data.Dataset,
                     load_previous: bool):
     # Make the model object!
-    model: MTRFv4Res = PARAM_TO_MODEL[model_name](hp_set, pretrained_emb_dir=PRETRAINED_DIR)
+    model_obj: MTRFv4Res = PARAM_TO_MODEL[model_name](hp_set, pretrained_emb_dir=PRETRAINED_DIR)
+    model = model_obj.build_model()
     logger.info('Clean model summary:')
     # Extra parentheses for build() because input_shapes are not required.
-    model.build().summary()
+    model.summary()
     # Same model image to experiment directory.
     os.makedirs(os.path.join(EXPERIMENT_DIR, experiment_name), exist_ok=True)
 
@@ -116,7 +117,7 @@ def train_test_eval(model_name,
             shutil.rmtree(model_artifact_dir)
             os.makedirs(model_artifact_dir, exist_ok=True)
     # Put model image in the model artifacts for reference afterwards.
-    tf.keras.utils.plot_model(model.build(), to_file=os.path.join(model_artifact_dir, f'{model_name}.png'),
+    tf.keras.utils.plot_model(model, to_file=os.path.join(model_artifact_dir, f'{model_name}.png'),
                               show_shapes=True)
     # Make callbacks...
     checkpointer = ModelCheckpoint(filepath=os.path.join(checkpoint_dir, 'cp_{epoch:03d}.ckpt'),
@@ -165,7 +166,8 @@ def run_thematic_evaluation(tasks: list, model, experiment):
         if task == 'bicknell':
             evaluator = BicknellTask(SRC_DIR, EXPERIMENT_DIR, model, experiment)
         elif task == 'gs':
-            evaluator = GS2013Task(SRC_DIR, EXPERIMENT_DIR, model, experiment)
+            # Load the context embedding for the GS2013 task!!
+            evaluator = GS2013Task(SRC_DIR, EXPERIMENT_DIR, model, experiment, get_embedding=True)
         else:
             evaluator = CorrelateTFScores(SRC_DIR, EXPERIMENT_DIR, model, experiment, task)
         evaluator.run_task()

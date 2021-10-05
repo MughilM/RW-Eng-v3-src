@@ -6,11 +6,15 @@ Creation Date: 2021-05-29
 This file contains our evaluation tasks. We have a base class that defines the basic
 functions, while the rest are subclassed.
 """
+import sys
+
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 import os
 from typing import Dict, Type
+import tensorflow as tf
+from tensorflow.keras.optimizers import Adam
 from model_implementation.architecture.models import *
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
 import logging
@@ -19,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class EvaluationTask:
-    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name):
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False):
         # This is needed so the correct model structure is used
         # when loading the model from the checkpoint.
         PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
@@ -36,8 +40,19 @@ class EvaluationTask:
         # correct model structure, using the hyperparameters. This is why the model_name
         # is needed. The hyperparameters are saved in the experiment directory.
         self.hp_set = HyperparameterSet(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'hyperparameters.json'))
-        # Load the model using the hyperparameters
-        self.model: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.hp_set)
+        # Create the model layers using the hyperparameters
+        model_obj: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.hp_set)
+        # Now, we build with training=False, and if we need the embeddings. At this point,
+        # we don't have weights...
+        self.model = model_obj.build_model(training=False, get_embedding=get_embedding)
+        self.model.compile(optimizer=Adam(learning_rate=0.01), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        # NOW WE LOAD THE WEIGHTS. Now, since we don't have bias, we will at least
+        # get a warning, saying that a layer's weights was not loaded. THIS IS FINE.
+        checkpoint_dir = os.path.join(SRC_DIR, EXPERIMENT_DIR, experiment_name, 'checkpoints')
+        latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
+        # We won't use all the weights (bias or half the model will be missing),
+        # so do expect_partial() to remove the warnings...
+        self.model.load_weights(latest_checkpoint).expect_partial()
         logger.info(f'Loaded model and hyperparameters from {os.path.join(self.EXPERIMENT_DIR, self.experiment_name)}')
         # This should be used to save any metrics, that can later be written in
         # the generate report method.
@@ -82,7 +97,8 @@ class EvaluationTask:
         :return:
         """
         all_inputs = self._preprocess()
-        outputs = self.model(all_inputs, training=False)
+        outputs = self.model(all_inputs, training=False)  # This is a different training argument (changes behaviour
+                                                          # of certain layers, like BatchNormalization)
         self._calc_score(outputs)
         self._generate_report()
 
@@ -93,8 +109,8 @@ class CorrelateTFScores(EvaluationTask):
     noun is supposed to fill, and a thematic fit judgement score. This data should be in
     csv format with columns as verb,noun,role,score.
     """
-    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, dataset_name: str):
-        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name)
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, dataset_name: str, get_embedding=False):
+        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding)
         self.dataset_name = dataset_name
         self.dataset_input_file = os.path.join(self.SRC_DIR, f'evaluation/task_data/{dataset_name}.csv')
         self.dataset = pd.read_csv(self.dataset_input_file)
@@ -214,8 +230,8 @@ class CorrelateTFScores(EvaluationTask):
 
 
 class BicknellTask(EvaluationTask):
-    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name):
-        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name)
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False):
+        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding)
         self.dataset_name = 'bicknell'
         self.dataset_input_file = os.path.join(SRC_DIR, f'evaluation/task_data/{self.dataset_name}.csv')
         self.dataset = pd.read_csv(self.dataset_input_file)
@@ -333,8 +349,8 @@ class BicknellTask(EvaluationTask):
 
 
 class GS2013Task(EvaluationTask):
-    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name):
-        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name)
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False):
+        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding)
         self.gs = pd.read_csv(os.path.join(SRC_DIR, 'evaluation/task_data/GS2013.csv'))
         # Don't copy it yet, because we need some preprocessing on the original data...
         self.gs_ids = None
@@ -504,15 +520,14 @@ class GS2013Task(EvaluationTask):
             f.write(fin_report)
         logger.info(f'GS2013 evaluation finished. Results saved to {output_file_path}.')
 
-
     def run_task(self):
         """
-        We need to override the run_task because the output is different than
-        normal
+        We need to do a slight override the run_task because we need to pass both
+        the base and landmark context
         :return:
         """
         all_inputs = self._preprocess()
-        base_context = self.model(all_inputs['base_verb_input'], training=False, get_embedding=True)
-        landmark_context = self.model(all_inputs['landmark_verb_input'], training=False, get_embedding=True)
+        base_context = self.model(all_inputs['base_verb_input'], training=False)['context_embedding']
+        landmark_context = self.model(all_inputs['landmark_verb_input'], training=False)['context_embedding']
         self._calc_score(base_context, landmark_context)
         self._generate_report()
