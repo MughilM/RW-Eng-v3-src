@@ -152,7 +152,13 @@ def train_test_eval(model_name,
     latest = tf.train.latest_checkpoint(checkpoint_dir)
     logger.info(f'Testing with latest checkpoint: {latest}')
     model.load_weights(latest)
-    model.evaluate(test_dataset, workers=2)
+    # Evaluate on test set, and create dictionary for testing metrics
+    test_metrics = model.evaluate(test_dataset)
+    test_keys = ['Loss', 'Role Loss', 'Word Loss', 'Role Accuracy', 'Word Accuracy']
+    test_metrics_json = {k: v for k, v in zip(test_keys, test_metrics)}
+    # Save the test metrics in the corresponding experiment folder
+    with open(os.path.join(model_artifact_dir, 'test_metrics.json'), 'w') as f:
+        json.dump(test_metrics_json, f, indent=2)
     logger.info('Testing done. To resume training, please use the checkpoint directory.')
     logger.info(f'EXPERIMENT AND HYPERPARAMETERS SAVED AT {model_artifact_dir}.\n')
 
