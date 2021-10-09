@@ -60,6 +60,9 @@ for directory in [EXPERIMENT_DIR, PRETRAINED_DIR, CSV_PIECE_PATH, DATA_PATH]:
 # This the role set we will be using...
 ROLE_SET = Roles2Args3Mods
 
+# The list of all evaluation tasks
+ALL_EVAL_TASKS = ['pado', 'mcrae', 'greenberg', 'bicknell', 'gs', 'ferretti_instrument', 'ferretti_location']
+
 # Start the clock, this allows all the methods to access
 # the time...
 total_time_start = datetime.datetime.now(datetime.timezone.utc)
@@ -258,7 +261,7 @@ if __name__ == '__main__':
                                  'tasks. In this way it differs from do_eval, which allows for both training '
                                  'and evaluation in the same program run.')
     eval_task_group = parser.add_mutually_exclusive_group()
-    eval_task_group.add_argument('--evaluation_tasks', choices=['pado', 'mcrae', 'greenberg', 'bicknell', 'gs'],
+    eval_task_group.add_argument('--evaluation_tasks', choices=ALL_EVAL_TASKS,
                                  nargs='*', default=None,
                                  help='The specific evaluation tasks to run. Must specify at least one.')
     eval_task_group.add_argument('--run_all_tasks', action='store_true', default=False,
@@ -308,7 +311,7 @@ if __name__ == '__main__':
     # Run the evaluation if one of the parameters is specified
     if args.do_eval or args.eval_only:
         if args.run_all_tasks:
-            run_thematic_evaluation(['pado', 'mcrae', 'greenberg', 'bicknell', 'gs'], args.model_name, experiment_name)
+            run_thematic_evaluation(ALL_EVAL_TASKS, args.model_name, experiment_name)
         else:
             run_thematic_evaluation(args.evaluation_tasks, args.model_name, experiment_name)
 
