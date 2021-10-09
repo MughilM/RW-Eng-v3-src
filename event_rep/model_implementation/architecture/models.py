@@ -91,10 +91,12 @@ class MTRFv4Res(BaseModel):
         # the target word embedding inputs to the ROLE and vice versa.
         self.target_word_embedding = Embedding(self.hp_set.word_vocab_count, self.hp_set.n_factors_cls,
                                                embeddings_initializer=glorot_uniform(),
-                                               name='target_word_embedding')
+                                               name='target_word_embedding',
+                                               trainable=not self.hp_set.freeze_word_embeddings)
         self.target_role_embedding = Embedding(self.hp_set.role_vocab_count, self.hp_set.n_factors_cls,
                                                embeddings_initializer=glorot_uniform(),
-                                               name='target_role_embedding')
+                                               name='target_role_embedding',
+                                               trainable=not self.hp_set.freeze_role_embeddings)
         # Create two dropout layers for both, and a reshape layer as there is an extra dimension.
         self.target_word_drop = Dropout(self.hp_set.dropout_rate, name='target_word_dropout')
         self.target_role_drop = Dropout(self.hp_set.dropout_rate, name='target_role_dropout')
