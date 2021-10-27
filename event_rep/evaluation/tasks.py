@@ -148,8 +148,8 @@ class CorrelateTFScores(EvaluationTask):
         target_role_indices = self.hp_set.role_vocab_count * np.arange(input_roles.shape[0]) + self.dataset_ids['role']
         # After dropping, the matrix flattens, reshape it...
         input_roles = np.delete(input_roles, target_role_indices).reshape((-1, self.hp_set.role_vocab_count - 1))
-        # First make the input_words be filled with unknown words...
-        input_words = np.full(shape=(self.dataset.shape[0], 6), fill_value=self.hp_set.unk_word_id, dtype=int)
+        # First make the input_words be filled with missing words... (missing means a role does not have a word)
+        input_words = np.full(shape=(self.dataset.shape[0], 6), fill_value=self.hp_set.missing_word_id, dtype=int)
         # Get the location in each row which corresponds to V (because one role is missing in each row,
         # the column will change in each row) and set them to the verb word IDs.
         input_words[np.where(input_roles == self.hp_set.role_vocabulary['V'])] = self.dataset_ids['verb'].values
@@ -175,13 +175,13 @@ class CorrelateTFScores(EvaluationTask):
         # We will save the unknown words, and calculate a correlation for the whole
         # dataset as well as a correlation with the unknown words removed.
         unknown_verbs = self.dataset['verb'][self.dataset_ids['verb'] == self.hp_set.unk_word_id]
-        missing_nouns = self.dataset['noun'][self.dataset_ids['noun'] == self.hp_set.unk_word_id]
+        unknown_nouns = self.dataset['noun'][self.dataset_ids['noun'] == self.hp_set.unk_word_id]
         self.metrics['unknown_verbs'] = np.unique(unknown_verbs.values)
-        self.metrics['unknown_nouns'] = np.unique(missing_nouns.values)
+        self.metrics['unknown_nouns'] = np.unique(unknown_nouns.values)
         # Combine the two indices so we can easily remove from the main df in one line
-        total_unknown_index = unknown_verbs.index.union(missing_nouns.index)
+        total_unknown_index = unknown_verbs.index.union(unknown_nouns.index)
         self.metrics['unknown_n'] = len(total_unknown_index)
-        # Create a dataframe with the missing verbs + nouns dropped
+        # Create a dataframe with the unknown verbs + nouns dropped
         self.dataset_dropped = self.dataset.drop(index=total_unknown_index)
         rho, p = spearmanr(self.dataset['score'], self.dataset['noun_probs'])
         self.metrics['rho'] = rho
@@ -254,8 +254,8 @@ class BicknellTask(EvaluationTask):
         # the role vocabulary. The input roles will still be 0-5, except the corresponding
         # columns in the input word matrix will be adjusted accordingly.
         input_roles = np.repeat(np.arange(6, dtype=int)[np.newaxis, :], repeats=self.dataset.shape[0], axis=0)
-        # Initially fill the input words with unknown words
-        input_words = np.full(shape=(self.dataset.shape[0], 6), fill_value=self.hp_set.unk_word_id, dtype=int)
+        # Initially fill the input words with missing words
+        input_words = np.full(shape=(self.dataset.shape[0], 6), fill_value=self.hp_set.missing_word_id, dtype=int)
         # Get the agent and verb IDs from the role vocabulary so we know what column to change...
         agent_id = self.hp_set.role_vocabulary['A0']
         verb_id = self.hp_set.role_vocabulary['V']
@@ -380,7 +380,7 @@ class GS2013Task(EvaluationTask):
         # Now to actually create the input arrays...The input words will be the only
         # thing that differs between the two sets of input...
         input_roles = np.repeat(np.arange(6, dtype=int)[np.newaxis, :], repeats=self.gs.shape[0], axis=0)
-        base_verb_words = np.full(shape=(self.gs.shape[0], 6), fill_value=self.hp_set.unk_word_id, dtype=int)
+        base_verb_words = np.full(shape=(self.gs.shape[0], 6), fill_value=self.hp_set.missing_word_id, dtype=int)
         # Get the corresponding columns. We use the A0, V, and A1 as the roles...
         subject_id = self.hp_set.role_vocabulary['A0']
         verb_id = self.hp_set.role_vocabulary['V']
@@ -507,7 +507,7 @@ class GS2013Task(EvaluationTask):
                       f"{self.metrics['low_rho'] * 100:.3f}%, P-value of {self.metrics['low_p']:.6f}\n"
         fin_report += f"  - HIGH DATASET ({self.gs[self.gs['hilo'] == 'HIGH'].shape[0]}):" \
                       f" {self.metrics['high_rho'] * 100:.3f}%, P-value of {self.metrics['high_p']:.6f}\n\n"
-        fin_report += f"MISSING REMOVED ({self.gs_dropped.shape[0]}): {self.metrics['rho_m'] * 100:.3f}%, " \
+        fin_report += f"UNKNOWN REMOVED ({self.gs_dropped.shape[0]}): {self.metrics['rho_m'] * 100:.3f}%, " \
                       f"P-value of {self.metrics['p_m']:.6f}\n"
         fin_report += f"  - LOW DATASET ({self.gs_dropped[self.gs_dropped['hilo'] == 'LOW'].shape[0]}): " \
                       f"{self.metrics['low_rho_m'] * 100:.3f}%, P-value of {self.metrics['low_p_m']:.6f}\n"
