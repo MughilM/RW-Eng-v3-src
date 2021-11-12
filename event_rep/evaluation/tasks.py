@@ -19,6 +19,8 @@ from model_implementation.architecture.models import *
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
 import logging
 
+from nltk.stem import WordNetLemmatizer
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,6 +36,7 @@ class EvaluationTask:
         self.EXPERIMENT_DIR = EXPERIMENT_DIR
         self.model_name = model_name
         self.experiment_name = experiment_name
+        self.lemmatizer = WordNetLemmatizer()
         # Because this is a subclassed model we can't load the model all together,
         # due to unstable serialization for subclassed models. Instead, we can use
         # the checkpoints to load the weights. On the flip side, we have to make the
@@ -114,6 +117,9 @@ class CorrelateTFScores(EvaluationTask):
         self.dataset_name = dataset_name
         self.dataset_input_file = os.path.join(self.SRC_DIR, f'evaluation/task_data/{dataset_name}.csv')
         self.dataset = pd.read_csv(self.dataset_input_file)
+        # Lemmatize the words...
+        self.dataset['verb'] = self.dataset['verb'].apply(lambda w: self.lemmatizer.lemmatize(w, pos='v'))
+        self.dataset['noun'] = self.dataset['noun'].apply(lambda w: self.lemmatizer.lemmatize(w, pos='n'))
         self.dataset_ids = self.dataset.copy()
 
     def _preprocess(self) -> Dict[str, np.ndarray]:
@@ -235,6 +241,10 @@ class BicknellTask(EvaluationTask):
         self.dataset_name = 'bicknell'
         self.dataset_input_file = os.path.join(SRC_DIR, f'evaluation/task_data/{self.dataset_name}.csv')
         self.dataset = pd.read_csv(self.dataset_input_file)
+        # Lemmatize the verb and two patient columns. The patients are nouns
+        self.dataset['verb'] = self.dataset['verb'].apply(lambda w: self.lemmatizer.lemmatize(w, pos='v'))
+        self.dataset['cong_patient'] = self.dataset['cong_patient'].apply(lambda w: self.lemmatizer.lemmatize(w, pos='n'))
+        self.dataset['incong_patient'] = self.dataset['incong_patient'].apply(lambda w: self.lemmatizer.lemmatize(w, pos='n'))
         self.dataset_ids = self.dataset.copy()
 
     def _preprocess(self) -> Dict[str, np.ndarray]:
@@ -352,6 +362,11 @@ class GS2013Task(EvaluationTask):
     def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False):
         super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding)
         self.gs = pd.read_csv(os.path.join(SRC_DIR, 'evaluation/task_data/GS2013.csv'))
+        # Lemmatize...
+        for noun_col in ['subject', 'object']:
+            self.gs[noun_col] = self.gs[noun_col].apply(lambda w: self.lemmatizer.lemmatize(w, pos='n'))
+        for verb_col in ['base_verb', 'landmark_verb']:
+            self.gs[verb_col] = self.gs[verb_col].apply(lambda w: self.lemmatizer.lemmatize(w, pos='v'))
         # Don't copy it yet, because we need some preprocessing on the original data...
         self.gs_ids = None
         self.word_cols = ['subject', 'base_verb', 'object', 'landmark_verb']
