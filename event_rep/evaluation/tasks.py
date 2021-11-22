@@ -123,13 +123,6 @@ class CorrelateTFScores(EvaluationTask):
         self.dataset_ids = self.dataset.copy()
 
     def _preprocess(self) -> Dict[str, np.ndarray]:
-        ROLE_MAP = {
-            'subj': 'A0',
-            'obj': 'A1',
-            'bene': 'A2',
-            'instrument': 'AM-MNR',
-            'location': 'AM-LOC'
-        }
         # dataset_ids will have our words all be converted to IDs,
         # including the roles, in the 3rd column. If we have
         # a word that's not in the vocabulary, then put the unknown word ID (2nd arg in get())
@@ -138,11 +131,11 @@ class CorrelateTFScores(EvaluationTask):
         # Doing both columns will not work, as we will run into the Series hash issue.
         self.dataset_ids['verb'] = self.dataset_ids['verb'].apply(word_to_id)
         self.dataset_ids['noun'] = self.dataset_ids['noun'].apply(word_to_id)
-        # Convert our role column to role IDs, using the ROLE_MAP and the role vocabulary.
+        # Convert our role column to role IDs.
         # If the model was NOT TRAINED ON the A2 beneficiary role, then we must replace
         # A2 with <OTHER>, so the mapping doesn't error out on encounter.
         self.dataset_ids['role'] = self.dataset_ids['role'].\
-            apply(lambda role: self.hp_set.role_vocabulary.get(ROLE_MAP[role], self.hp_set.role_vocabulary['<OTHER>']))
+            apply(lambda role: self.hp_set.role_vocabulary.get(role, self.hp_set.role_vocabulary['<OTHER>']))
         # Now we have our inputs in terms of IDs, and we can make the metrics.
         # The important thing is that we need to emulate how we trained the model. There,
         # given N roles, each sample had N - 1 input roles, with one removed for the target role.
