@@ -2,6 +2,7 @@
   "batch_size": 1024,
   "dropout_rate": 0.2,
   "embedding_type": "random",
+  "oov": "avg",
   "epochs": 25,
   "freeze_role_embeddings": false,
   "freeze_word_embeddings": false,

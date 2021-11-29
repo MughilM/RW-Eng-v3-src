@@ -205,11 +205,13 @@ if __name__ == '__main__':
                         help='The batch size for training')
     parser.add_argument('--dropout_rate', type=float, default=hp_set.dropout_rate,
                         help='The dropout rate for the Dropout layers. Should be between 0 and 1.')
-    parser.add_argument('--embedding_type', choices=['random', 'spacy_0', 'spacy_avg', 'fasttext_0',
-                                                     'fasttext_avg', 'w2v_0', 'w2v_avg'], default='random',
+    parser.add_argument('--embedding_type', choices=['random', 'glove', 'fasttext', 'w2v'], default='random',
                         help='The type of embedding to use for WORDS. Can be random, or a type of'
-                             'pretrained embedding (spaCy, Fasttext, Word2Vec) along with an OOV initialization'
-                             '(one of 0 or avg)')
+                             'pretrained embedding (GloVe (from spaCy), Fasttext, Word2Vec)')
+    parser.add_argument('--oov', choices=['0', 'avg'], default='avg',
+                        help='The type of out-of-vocabulary initialization for the pretrained embeddings. '
+                             'Either initialize OOV to 0 vectors, or to the average of the rest. Does not '
+                             'get used for random embeddings, since there are no OOV. Default avg.')
     parser.add_argument('--epochs', type=int, default=hp_set.epochs,
                         help='The MAXIMUM number of epochs to train. It will likely not reach this amount due'
                              'to early stopping criteria.')
@@ -260,12 +262,12 @@ if __name__ == '__main__':
                             help='If specified, then DOES NOT RUN TRAINING! It will ONLY run the evaluation '
                                  'tasks. In this way it differs from do_eval, which allows for both training '
                                  'and evaluation in the same program run.')
-    eval_task_group = parser.add_mutually_exclusive_group()
-    eval_task_group.add_argument('--evaluation_tasks', choices=ALL_EVAL_TASKS,
-                                 nargs='*', default=None,
-                                 help='The specific evaluation tasks to run. Must specify at least one.')
-    eval_task_group.add_argument('--run_all_tasks', action='store_true', default=False,
-                                 help='If specified, runs ALL thematic fit evaluation tasks.')
+    # eval_task_group = parser.add_mutually_exclusive_group()
+    parser.add_argument('--evaluation_tasks', choices=ALL_EVAL_TASKS + ['all'],
+                        nargs='*', default=['all'],
+                        help='The specific evaluation tasks to run. Must specify at least one.')
+    # eval_task_group.add_argument('--run_all_tasks', action='store_true', default=False,
+    #                              help='If specified, runs ALL thematic fit evaluation tasks.')
 
     args = parser.parse_args()
     # Small checks for contradictions.
@@ -283,9 +285,10 @@ if __name__ == '__main__':
             sys.exit(1)
     # Special case, make sure specific evaluation tasks if evaluation is enabled and
     # run_all_tasks is False.
-    if (args.do_eval or args.eval_only) and not args.run_all_tasks and args.evaluation_tasks is None:
-        parser.error('Evaluation is enabled, but run_all_tasks is disabled and NO evaluation tasks '
-                     'were specified.')
+    if (args.do_eval or args.eval_only) and 'all' in args.evaluation_tasks and len(args.evaluation_tasks) > 1:
+        parser.error('Evaluation is enabled, but the "all" option is included along with other'
+                     'evaluation tasks. Please double check the task list.')
+        sys.exit(1)
 
     if args.experiment_name == '':
         experiment_name = f"{time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())}_{args.model_name}_" \
@@ -310,7 +313,7 @@ if __name__ == '__main__':
         hp_set.write_hp()
     # Run the evaluation if one of the parameters is specified
     if args.do_eval or args.eval_only:
-        if args.run_all_tasks:
+        if args.evaluation_tasks == ['all']:
             run_thematic_evaluation(ALL_EVAL_TASKS, args.model_name, experiment_name)
         else:
             run_thematic_evaluation(args.evaluation_tasks, args.model_name, experiment_name)
