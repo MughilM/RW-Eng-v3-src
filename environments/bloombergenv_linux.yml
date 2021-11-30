@@ -1,4 +1,4 @@
-name: bloomberg
+name: bloomberg-cu-capstone-2020
 channels:
   - defaults
 dependencies:
