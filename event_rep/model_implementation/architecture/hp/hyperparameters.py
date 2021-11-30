@@ -43,6 +43,7 @@ class HyperparameterSet:
         self.freeze_role_embeddings = False
         # Architecture parameters. As before, make sure names match.
         self.embedding_type = ''
+        self.oov = ''
         self.word_embedding_dimension = 0
         self.role_embedding_dimension = 0
         self.n_factors_cls = 0

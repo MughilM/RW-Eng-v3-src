@@ -190,16 +190,16 @@ class MTRFv4Res(BaseModel):
         :return:
         """
         # First check the embedding type. If random, then simply random a
-        # randomly initilized embedding...
+        # randomly initialized embedding...
         if self.hp_set.embedding_type == 'random':
             return Embedding(input_dim=self.hp_set.word_vocab_count,
                              output_dim=self.hp_set.word_embedding_dimension,
                              embeddings_initializer=glorot_uniform(), name='word_embedding_random',
                              trainable=not self.hp_set.freeze_word_embeddings)
-        # Otherwise we are looking at one of 3 embeddings, and one of 2 initilaizers
+        # Otherwise we are looking at one of 3 embeddings, and one of 2 initialaizers
         # for OOV...
-        embedding_source, oov_init = tuple(self.hp_set.embedding_type.split('_'))
-        layer_name = f'word_embedding_{embedding_source}_{oov_init}'
+        # embedding_source, oov_init = tuple(self.hp_set.embedding_type.split('_'))
+        layer_name = f'word_embedding_{self.hp_set.embedding_type}_{self.hp_set.oov}'
         # We essentially want to merge a blank embedding matrix with whatever
         # words we have in teh pretrained embedding model, and either leave the missing
         # word alone or impute them with the average embedding (plus some noise)
@@ -210,7 +210,8 @@ class MTRFv4Res(BaseModel):
         IDs = np.array(list(self.hp_set.word_vocabulary.values()))
         words = words[np.argsort(IDs)]
         # Check each of the three and merge embeddings...
-        if embedding_source == 'spacy':
+        if self.hp_set.embedding_type == 'glove':
+            # We get the GloVe embeddings using spaCy
             nlp = spacy.load('en_core_web_lg')
             # Get spaCy's embedding matrix
             spacy_matrix = nlp.vocab.vectors.data
@@ -221,7 +222,7 @@ class MTRFv4Res(BaseModel):
             full_embedding_matrix = spacy_matrix[spacy_IDs]
             # Whereever the spaCy ID is -1, set it to 0...
             full_embedding_matrix[spacy_IDs == -1] = 0
-        elif embedding_source == 'fasttext':
+        elif self.hp_set.embedding_type == 'fasttext':
             # Download fasttext embedding to the directory,
             # We can't control download location with utils.download_model
             fasttext_emb_path = os.path.join(self.PRETRAINED_DIR, 'cc.en.300.bin.gz')
@@ -246,7 +247,7 @@ class MTRFv4Res(BaseModel):
             # We don't need the fasttext model anymore, delete it, it's taking up 4 GB of memory...
             del fasttext_model
         # Last is Word2Vec
-        elif embedding_source == 'w2v':
+        elif self.hp_set.embedding_type == 'w2v':
             w2v_emb_path = os.path.join(self.PRETRAINED_DIR, 'GoogleNews-vectors-negative300.bin.gz')
             if not os.path.exists(w2v_emb_path):
                 self.logger.info(f'Word2Vec embeddings not present. Downloading file (~1.5 GB) to {w2v_emb_path}...', end='')
@@ -265,10 +266,10 @@ class MTRFv4Res(BaseModel):
             # Set any -1 gensim_IDs that are -1 to 0...
             full_embedding_matrix[gensim_IDs == -1] = 0
         else:
-            self.logger.error(f'Embedding source of {embedding_source} is invalid.')
+            self.logger.error(f'Embedding source of {self.hp_set.embedding_type} is invalid.')
         # Now check to see if we need to keep OOV at 0 or we need to average the
         # ones we have...
-        if oov_init == 'avg':
+        if self.hp_set.oov == 'avg':
             # By default, we have 0s for OOV. Get the rows of OOV...
             oov_rows = np.where(np.sum(full_embedding_matrix, axis=1) == 0)[0]
             # Easier to impute the mean if the 0s were nan.
