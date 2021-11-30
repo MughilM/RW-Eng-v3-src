@@ -16,9 +16,10 @@ Numerous problems were encountered using Python versions above 3.7 as well as Te
 Once NVIDIA, CUDA, and cuDNN libraries are installed and verified with `nvidia-smi` and `nvcc --version`, run the following commands to set up and activate an Anaconda environment with our libraries.
 
 ```bash
-cd environments
-conda env create -f <ENV_FILE>.yml
-conda activate bloomberg
+git clone https://github.com/MughilM/RW-Eng-v3-src.git
+cd RW-Eng-v3-src
+conda env create -f environments/capstoneenv_linux.yml
+conda activate bloomberg-cu-capstone-2020
 ```
 
 Make sure to select the correct environment file pertaining to your OS. This will create the `bloomberg` environment.
