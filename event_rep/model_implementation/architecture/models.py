@@ -365,3 +365,8 @@ class MTRFv5Res(MTRFv4Res):
         # tr_out = self.target_role_act(tr_out_raw)
         return Model(inputs=self.input_dict,
                      outputs={'w_out': tw_out, 'r_out': tr_out})
+
+
+class MTRFv6Res(MTRFv5Res):
+    def __init__(self, hp_set: HyperparameterSet, **kwargs):
+        super().__init__(hp_set, **kwargs)
