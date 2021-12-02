@@ -370,3 +370,77 @@ class MTRFv5Res(MTRFv4Res):
 class MTRFv6Res(MTRFv5Res):
     def __init__(self, hp_set: HyperparameterSet, **kwargs):
         super().__init__(hp_set, **kwargs)
+        # Depending on the role dimension size, we have to change the
+        # combining. The actual role embedding is already done due to the subclassing
+        # First, a special instruction for embedding size 7, which should be an
+        # orthogonal set.
+        # TODO: Clarify on the role embedding size when num of roles exceeds 7.
+
+        # For null roles, the instruction will be in the build_model(), we simply
+        # won't combine the roles with the words.
+        if self.hp_set.word_role_aggregation == 'concat':
+            # The concatenation will happen along the last dimension
+            # (e.g. (6, 300) words with (6, 3) roles will become (6, 303) with
+            # the first 300 being the words and the last 3 being the roles.
+            self.wr_agg_layer = Concatenate(axis=-1)
+        elif self.hp_set.word_role_aggregation == 'multiply':
+            self.wr_agg_layer = Multiply()
+
+    def build_model(self, training=True, get_embedding=False):
+        # Pass inputs through embedding...
+        word_embedding_out = self.word_embedding(self.input_words)
+        role_embedding_out = self.role_embedding(self.input_roles)
+        # Now zero out the missing word embeddings if need be.
+        if self.hp_set.zero_out_miss_embedding:
+            mask = self.embedding_mask(self.input_words)
+            # Update the embeddings
+            word_embedding_out = self.word_embed_multi([word_embedding_out, mask])
+        # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...
+        # ...but our default is nonzero...
+        word_embedding_out = self.word_dropout(word_embedding_out)
+        role_embedding_out = self.role_dropout(role_embedding_out)
+        #### THE CORRESPONDING V6 CHANGE IS HERE.
+        # If we chose NULL roles, then DON'T COMBINE, and pass the word embedding
+        # directly into the residual layer.
+        if self.hp_set.word_role_aggregation == 'null':
+            residual = self.prelu_proj_add([
+                word_embedding_out,
+                self.lin_proj2(self.prelu(self.lin_proj1(word_embedding_out)))
+            ])
+        # Otherwise, combine according to the aggregation layer saved
+        else:
+            total_embeddings = self.wr_agg_layer([word_embedding_out, role_embedding_out])
+            # Pass the total embeddings through the residual block next
+            residual = self.prelu_proj_add([
+                total_embeddings,
+                self.lin_proj2(self.prelu(self.lin_proj1(total_embeddings)))
+            ])
+        context_embedding = self.average_across_input(residual)
+        if get_embedding:
+            return Model(inputs=self.input_dict,
+                         outputs={'context_embedding': context_embedding})
+        # Create target role and word embeddings multiplied with the context.
+        # Note the crossing of inputs into the other's hidden layer.
+        # We are taking from V5, so get the target values from the input embeddings.
+        # Regardless if the aggregation is null, the target embedding should
+        # still take from here...
+        twh_out = self.target_word_hidden([
+            self.weight_context_word(context_embedding),
+            self.target_role_flatten(self.target_role_drop(self.role_embedding(self.target_role)))
+        ])
+        trh_out = self.target_role_hidden([
+            self.weight_context_role(context_embedding),
+            self.target_word_flatten(self.target_word_drop(self.word_embedding(self.target_word)))
+        ])
+        # Forward through the output layers.
+        # If training is False, then DO NOT USE THE BIAS IN THE OUTPUT LAYERS...
+        if not training:
+            tw_out = self.target_word_output_no_bias(twh_out)
+            tr_out = self.target_role_output_no_bias(trh_out)
+        else:
+            tw_out = self.target_word_output(twh_out)
+            tr_out = self.target_role_output(trh_out)
+        # tw_out = self.target_word_act(tw_out_raw)
+        # tr_out = self.target_role_act(tr_out_raw)
+        return Model(inputs=self.input_dict,
+                     outputs={'w_out': tw_out, 'r_out': tr_out})
