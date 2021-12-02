@@ -252,6 +252,11 @@ if __name__ == '__main__':
                         help='If listed, then substitutes the average + noise for pretrained embedding vectors'
                              'where those words are not listed in our vocabulary. By default, substitutes them'
                              'with all 0 vectors.')
+    parser.add_argument('--word_role_aggregation', choices=['multiply', 'concat', 'drop'], default='multiply',
+                        help='The aggregation method to combine the roles with the words. "multiply" will be applied'
+                             'if the role and word have the same embedding dimension. Otherwise, they will '
+                             'concatenated. The "drop" option means to completely REMOVE the roles from '
+                             'aggregation i.e. the model will only use the words.')
     # Extra parameter, role set, generally not touched at all.
     parser.add_argument('--role_set', type=Roles, default=Roles2Args3Mods,
                         help='The role set to use. Default Roless2Args3Mods')
@@ -270,6 +275,11 @@ if __name__ == '__main__':
     #                              help='If specified, runs ALL thematic fit evaluation tasks.')
 
     args = parser.parse_args()
+    # Check the choices for word_role_aggregation...
+    if (args.word_role_aggregation == 'multiply') and (args.word_embedding_dimension != args.role_embedding_dimension):
+        logger.warning('You chose multiply for the aggregation method, but the word and role dimensions '
+                       'are different. Aggregation method will change to "concat".')
+        args.word_role_aggregation = 'concat'
     # Small checks for contradictions.
     if args.eval_only:
         if args.experiment_name == '' or not os.path.exists(os.path.join(EXPERIMENT_DIR, args.experiment_name)):
