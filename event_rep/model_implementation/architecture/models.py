@@ -383,6 +383,12 @@ class MTRFv6Res(MTRFv5Res):
             # (e.g. (6, 300) words with (6, 3) roles will become (6, 303) with
             # the first 300 being the words and the last 3 being the roles.
             self.wr_agg_layer = Concatenate(axis=-1)
+            # An important side effect, is that the second linear layer
+            # in the PReLU block has to add with the context_embedding.
+            # Well, if we're concatenating, we have to carry that dimension over.
+            self.lin_proj2 = Dense(self.hp_set.word_embedding_dimension + self.hp_set.role_embedding_dimension,
+                                   activation='linear', use_bias=False, name='linear_proj_2')
+
         elif self.hp_set.word_role_aggregation == 'multiply':
             self.wr_agg_layer = Multiply()
 

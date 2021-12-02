@@ -50,7 +50,8 @@ hp_set = HyperparameterSet(os.path.join(SRC_DIR, 'model_implementation/architect
 # TODO: Add models here as necessary, as the argument enforcement is on the keys
 PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
     'v4': MTRFv4Res,
-    'v5': MTRFv5Res
+    'v5': MTRFv5Res,
+    'v6': MTRFv6Res
 }
 
 # Make the directories if they don't already exist.
@@ -252,7 +253,7 @@ if __name__ == '__main__':
                         help='If listed, then substitutes the average + noise for pretrained embedding vectors'
                              'where those words are not listed in our vocabulary. By default, substitutes them'
                              'with all 0 vectors.')
-    parser.add_argument('--word_role_aggregation', choices=['multiply', 'concat', 'drop'], default='multiply',
+    parser.add_argument('--word_role_aggregation', choices=['multiply', 'concat', 'null'], default='multiply',
                         help='The aggregation method to combine the roles with the words. "multiply" will be applied'
                              'if the role and word have the same embedding dimension. Otherwise, they will '
                              'concatenated. The "drop" option means to completely REMOVE the roles from '
