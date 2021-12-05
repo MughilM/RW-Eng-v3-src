@@ -46,6 +46,7 @@ class HyperparameterSet:
         self.oov = ''
         self.word_embedding_dimension = 0
         self.role_embedding_dimension = 0
+        self.use_ortho_roles = False
         self.word_role_aggregation = ''
         self.n_factors_cls = 0
         self.hidden_neurons = 0

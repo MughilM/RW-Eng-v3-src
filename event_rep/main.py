@@ -258,6 +258,9 @@ if __name__ == '__main__':
                              'if the role and word have the same embedding dimension. Otherwise, they will '
                              'concatenated. The "drop" option means to completely REMOVE the roles from '
                              'aggregation i.e. the model will only use the words.')
+    parser.add_argument('--use_ortho_roles', dest='use_ortho_roles', action='store_true', default=False,
+                        help='Whether to initialize the role embedding with orthogonal vectors. Completely '
+                             'depends on the number of roles in the model. Default False.')
     # Extra parameter, role set, generally not touched at all.
     parser.add_argument('--role_set', type=Roles, default=Roles2Args3Mods,
                         help='The role set to use. Default Roless2Args3Mods')

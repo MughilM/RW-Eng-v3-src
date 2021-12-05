@@ -16,6 +16,7 @@
   "n_factors_cls": 300,
   "pretrained_embedding_size": 300,
   "role_embedding_dimension": 300,
+  "use_ortho_roles": false,
   "word_embedding_dimension": 300,
   "word_role_aggregation": "multiply",
   "zero_out_miss_embedding": true
