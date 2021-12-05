@@ -373,8 +373,14 @@ class MTRFv6Res(MTRFv5Res):
         # Depending on the role dimension size, we have to change the
         # combining. The actual role embedding is already done due to the subclassing
         # First, a special instruction for embedding size 7, which should be an
-        # orthogonal set.
-        # TODO: Clarify on the role embedding size when num of roles exceeds 7.
+        # orthogonal set. The orthogonal set will be an identity matrix
+        # the size of the number of roles we have
+        if self.hp_set.use_ortho_roles:
+            self.role_embedding = Embedding(input_dim=self.hp_set.role_vocab_count,
+                                            output_dim=self.hp_set.role_vocab_count,
+                                            embeddings_initializer=constant(np.eye(self.hp_set.role_vocab_count)),
+                                            name='role_embedding',
+                                            trainable=not self.hp_set.freeze_role_embeddings)
 
         # For null roles, the instruction will be in the build_model(), we simply
         # won't combine the roles with the words.
@@ -383,11 +389,6 @@ class MTRFv6Res(MTRFv5Res):
             # (e.g. (6, 300) words with (6, 3) roles will become (6, 303) with
             # the first 300 being the words and the last 3 being the roles.
             self.wr_agg_layer = Concatenate(axis=-1)
-            # An important side effect, is that the second linear layer
-            # in the PReLU block has to add with the context_embedding.
-            # Well, if we're concatenating, we have to carry that dimension over.
-            self.lin_proj2 = Dense(self.hp_set.word_embedding_dimension + self.hp_set.role_embedding_dimension,
-                                   activation='linear', use_bias=False, name='linear_proj_2')
 
         elif self.hp_set.word_role_aggregation == 'multiply':
             self.wr_agg_layer = Multiply()
@@ -406,21 +407,22 @@ class MTRFv6Res(MTRFv5Res):
         word_embedding_out = self.word_dropout(word_embedding_out)
         role_embedding_out = self.role_dropout(role_embedding_out)
         #### THE CORRESPONDING V6 CHANGE IS HERE.
-        # If we chose NULL roles, then DON'T COMBINE, and pass the word embedding
-        # directly into the residual layer.
+        # 1) If we chose NULL roles, then DON'T COMBINE, and pass the word embedding
+        #    directly into the residual layer.
+        # 2) The residual connection is on the first dense layer (lin_proj1)
+        #    instead of the aggregation layer (multiply/concatenation). This
+        #    introduces the fewest weights in case the role embedding is large.
         if self.hp_set.word_role_aggregation == 'null':
-            residual = self.prelu_proj_add([
-                word_embedding_out,
-                self.lin_proj2(self.prelu(self.lin_proj1(word_embedding_out)))
-            ])
+            total_embeddings = word_embedding_out
         # Otherwise, combine according to the aggregation layer saved
         else:
             total_embeddings = self.wr_agg_layer([word_embedding_out, role_embedding_out])
-            # Pass the total embeddings through the residual block next
-            residual = self.prelu_proj_add([
-                total_embeddings,
-                self.lin_proj2(self.prelu(self.lin_proj1(total_embeddings)))
-            ])
+        # Pass the total embeddings through the residual layer,
+        # and make sure to connect the Add to the first Dense layer, and not the embeddings
+        residual = self.prelu_proj_add([
+            self.lin_proj1(total_embeddings),
+            self.lin_proj2(self.prelu(self.lin_proj1(total_embeddings)))
+        ])
         context_embedding = self.average_across_input(residual)
         if get_embedding:
             return Model(inputs=self.input_dict,

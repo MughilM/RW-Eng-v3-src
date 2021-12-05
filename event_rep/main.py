@@ -316,7 +316,11 @@ if __name__ == '__main__':
         hp_set.update_parameters(opts)
         # Next, we also need to read in the description file from the input data directory
         hp_set.read_description_params(os.path.join(DATA_PATH, args.data_version, 'description'))
-
+        # Small argument check. If we are using orthogonal roles, then change value
+        # of role embedding dimension to match the input role size
+        # (This also helps adjust some other layers, other than role embedding, during build)
+        if hp_set.use_ortho_roles:
+            hp_set.role_embedding_dimension = hp_set.role_vocab_count
         train, vali, test = create_dataset_objects(args.data_version)
         model, model_artifact_dir = train_test_eval(args.model_name, experiment_name,
                                                     train, vali, test, args.load_previous)
