@@ -30,7 +30,8 @@ class EvaluationTask:
         # when loading the model from the checkpoint.
         PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
             'v4': MTRFv4Res,
-            'v5': MTRFv5Res
+            'v5': MTRFv5Res,
+            'v6': MTRFv6Res
         }
         self.SRC_DIR = SRC_DIR
         self.EXPERIMENT_DIR = EXPERIMENT_DIR
