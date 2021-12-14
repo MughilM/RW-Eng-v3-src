@@ -32,6 +32,7 @@ class HyperparameterSet:
         # META parameters. Make sure the name matches exactly with JSON keys,
         # as we'll be using setattr to transfer the values over.
         self.batch_size = 0
+        self.patience = 0
         self.epochs = 0
         self.learning_rate = 0
         self.learning_rate_decay = 0

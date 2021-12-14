@@ -129,9 +129,9 @@ def train_test_eval(model_name,
                                    save_best_only=True,
                                    verbose=0,
                                    save_weights_only=True)
-    stopper = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=5, verbose=1)
+    stopper = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=hp_set.patience, verbose=1)
     nanChecker = TerminateOnNaN()
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=5, min_lr=1e-3)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=hp_set.patience, min_lr=1e-3)
     metric_callback = MetricCallback(model_odj=model, save_dir=model_artifact_dir, save_freq=1,
                                      past_metrics=past_metrics)
 
@@ -261,6 +261,9 @@ if __name__ == '__main__':
     parser.add_argument('--use_ortho_roles', dest='use_ortho_roles', action='store_true', default=False,
                         help='Whether to initialize the role embedding with orthogonal vectors. Completely '
                              'depends on the number of roles in the model. Default False.')
+    parser.add_argument('--patience', type=int, default=5,
+                        help='The patience during model training. This denotes the number of epochs the model'
+                             'will continue to train if the validation loss does not improve.')
     # Extra parameter, role set, generally not touched at all.
     parser.add_argument('--role_set', type=Roles, default=Roles2Args3Mods,
                         help='The role set to use. Default Roless2Args3Mods')
