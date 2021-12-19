@@ -26,10 +26,12 @@ Make sure to select the correct environment file pertaining to your OS. This wil
 
 ## Usage
 
-Everything is run from `main.py`. We have included a small dataset of 1000 samples in `processed_data`. This folder is currently set as the data directory. Any additional datasets should be placed here. Simply choose the model and dataset name, along with other optional parameters such as experiment name, epochs, etc. Experiments are saved to the `experiments` subfolder.
+Everything is run from `main.py`. We have included a small dataset of 1000 samples in `processed_data` called `v2` (The second argument is the `--data_version`). The `processed_data` folder is currently set as the data directory, which means **any dataset you wish to use needs to be moved to this folder**. Simply choose the model and dataset name, along with other optional parameters such as experiment name, epochs, etc. Experiments are saved to the `experiments` subfolder.
 
 ```bash
-python main.py v4 v2 \
+python main.py \
+  v4 \
+  v2 \
   --experiment_name test_exp \
   --epochs 15 \
   --batch_size 64 \
@@ -37,17 +39,19 @@ python main.py v4 v2 \
   --evaluation_tasks pado mcrae
 ```
 
-This will train the MTRFv4Res model with 15 epochs and save under `test_exp`. It will also perform the Pado07 and McRae05 thematic fit evaluation tasks.
+This will train the MTRFv4Res model with 15 epochs and save under `test_exp`. It will also perform the Pado07 and McRae05 thematic fit evaluation tasks. Please see `models.py` to see a list of models currently implemented. The `PARAM_TO_MODEL` variable in `main.py` states which argument name maps to which model. Any extra models you wish to implement should extend `MTRFv4Res`, placed in `models.py`, and have `PARAM_TO_MODEL` updated.
 
 ### Only Evaluation
 
 If evaluating on an already trained model is desired, then simply provide the experiment name and the `--eval_only` flag:
 
 ```bash
-python main.py v4 v2 \
+python main.py \
+  v4 \
+  v2 \
   --experiment_name test_exp \
   --eval_only \
-  --run_all_tasks
+  --evaluation_tasks all
 ```
 
 Due to the very last flag, this will run ALL the thematic fit evaluation tasks.
