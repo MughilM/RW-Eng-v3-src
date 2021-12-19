@@ -51,7 +51,8 @@ hp_set = HyperparameterSet(os.path.join(SRC_DIR, 'model_implementation/architect
 PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
     'v4': MTRFv4Res,
     'v5': MTRFv5Res,
-    'v6': MTRFv6Res
+    'v6': MTRFv6Res,
+    'v8': MTRFv8Res
 }
 
 # Make the directories if they don't already exist.
