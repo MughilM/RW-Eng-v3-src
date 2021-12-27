@@ -31,7 +31,14 @@ from model_implementation.core.roles import *
 from model_implementation.core.callbacks import MetricCallback
 from evaluation.tasks import CorrelateTFScores, BicknellTask, GS2013Task
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('main')
+logger.setLevel(logging.DEBUG)
+
+handler = logging.StreamHandler(sys.stdout)
+# create a logging format
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 # Directory locations
 # The absolute path where main is being run. Should end in RW-Eng-v3-src/event_rep
