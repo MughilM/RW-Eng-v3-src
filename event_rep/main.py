@@ -19,12 +19,14 @@ import sys
 import time
 from typing import Dict, Type
 
+import nltk
+
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau, TerminateOnNaN
 from tensorflow.keras.optimizers import Adam
 
 from model_implementation.architecture.models import *
+from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
 from model_implementation.core.batcher import WordRoleWriter
-from model_implementation.core.color_logging import ColorHandler
 from model_implementation.core.roles import *
 from model_implementation.core.callbacks import MetricCallback
 from evaluation.tasks import CorrelateTFScores, BicknellTask, GS2013Task
@@ -64,6 +66,9 @@ ROLE_SET = Roles2Args3Mods
 
 # The list of all evaluation tasks
 ALL_EVAL_TASKS = ['pado', 'mcrae', 'greenberg', 'bicknell', 'gs', 'ferretti_instrument', 'ferretti_location']
+
+# Download wordnet packages from NLTK
+nltk.download('wordnet')
 
 # Start the clock, this allows all the methods to access
 # the time...
@@ -192,7 +197,7 @@ if __name__ == '__main__':
 
     # Required parameters
     parser.add_argument('model_name', choices=PARAM_TO_MODEL.keys(), type=str,
-                        help='The naem of the model to train. Must be one of the model classes'
+                        help='The name of the model to train. Must be one of the model classes'
                              'defined in models.py')
     parser.add_argument('data_version', type=str,
                         help='The folder in the data directory that contains NN_train, NN_test, etc.')
@@ -254,11 +259,12 @@ if __name__ == '__main__':
                         help='If listed, then substitutes the average + noise for pretrained embedding vectors'
                              'where those words are not listed in our vocabulary. By default, substitutes them'
                              'with all 0 vectors.')
-    parser.add_argument('--word_role_aggregation', choices=['multiply', 'concat', 'null'], default='multiply',
+    parser.add_argument('--word_role_aggregation', choices=['multiply', 'concat', 'null', 'full_null'], default='multiply',
                         help='The aggregation method to combine the roles with the words. "multiply" will be applied'
                              'if the role and word have the same embedding dimension. Otherwise, they will '
-                             'concatenated. The "drop" option means to completely REMOVE the roles from '
-                             'aggregation i.e. the model will only use the words.')
+                             'concatenated. The "null" option means to REMOVE the INPUT roles from '
+                             'aggregation i.e. the model will only use the words. Choosing "full_null" will set'
+                             'the target embedding to all ones (and freezes them), so in effect remove those as well.')
     parser.add_argument('--use_ortho_roles', dest='use_ortho_roles', action='store_true', default=False,
                         help='Whether to initialize the role embedding with orthogonal vectors. Completely '
                              'depends on the number of roles in the model. Default False.')
@@ -288,6 +294,9 @@ if __name__ == '__main__':
         logger.warning('You chose multiply for the aggregation method, but the word and role dimensions '
                        'are different. Aggregation method will change to "concat".')
         args.word_role_aggregation = 'concat'
+    # If we set the aggregation to full_null, then set to freeze the role embeddings
+    if args.word_role_aggregation == 'full_null':
+        args.freeze_role_embeddings = True
     # Small checks for contradictions.
     if args.eval_only:
         if args.experiment_name == '' or not os.path.exists(os.path.join(EXPERIMENT_DIR, args.experiment_name)):

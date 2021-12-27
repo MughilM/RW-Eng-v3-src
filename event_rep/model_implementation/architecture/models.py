@@ -250,7 +250,8 @@ class MTRFv4Res(BaseModel):
         elif self.hp_set.embedding_type == 'w2v':
             w2v_emb_path = os.path.join(self.PRETRAINED_DIR, 'GoogleNews-vectors-negative300.bin.gz')
             if not os.path.exists(w2v_emb_path):
-                self.logger.info(f'Word2Vec embeddings not present. Downloading file (~1.5 GB) to {w2v_emb_path}...', end='')
+                self.logger.info(f'Word2Vec embeddings not present. Downloading file (~1.5 GB) to {w2v_emb_path}...',
+                                 end='')
                 w2v_url = 'https://s3.amazonaws.com/dl4j-distribution/GoogleNews-vectors-negative300.bin.gz'
                 r = requests.get(w2v_url, allow_redirects=True)
                 open(w2v_emb_path, 'wb').write(r.content)
@@ -305,6 +306,7 @@ class MTRFv5Res(MTRFv4Res):
     We could use helper methods, but that introduces more links we need to manage.
     Plus, we have no idea how the functions would link from one to the next.
     """
+
     def __init__(self, hp_set: HyperparameterSet, **kwargs):
         super().__init__(hp_set, **kwargs)
         # Weighted context word will multiply with target role embedding,
@@ -393,6 +395,19 @@ class MTRFv6Res(MTRFv5Res):
         elif self.hp_set.word_role_aggregation == 'multiply':
             self.wr_agg_layer = Multiply()
 
+        # If we chose "full_null", then we need to freeze the role embedding with
+        # all ones. Therefore, no information is being passed through the Multiply
+        # in the weighted context before the word prediction.
+        # freeze_role_embeddings parameter is set to True in main if "full_null" was chosen.
+        elif self.hp_set.word_role_aggregation == 'full_null':
+            self.role_embedding = Embedding(input_dim=self.hp_set.role_vocab_count,
+                                            output_dim=self.hp_set.role_embedding_dimension,
+                                            embeddings_initializer=constant(
+                                                np.ones(shape=(self.hp_set.role_vocab_count,
+                                                               self.hp_set.role_embedding_dimension))),
+                                            name='role_embedding',
+                                            trainable=not self.hp_set.freeze_role_embeddings)
+
     def build_model(self, training=True, get_embedding=False):
         # Pass inputs through embedding...
         word_embedding_out = self.word_embedding(self.input_words)
@@ -412,7 +427,7 @@ class MTRFv6Res(MTRFv5Res):
         # 2) The residual connection is on the first dense layer (lin_proj1)
         #    instead of the aggregation layer (multiply/concatenation). This
         #    introduces the fewest weights in case the role embedding is large.
-        if self.hp_set.word_role_aggregation == 'null':
+        if self.hp_set.word_role_aggregation in ['null', 'full_null']:
             total_embeddings = word_embedding_out
         # Otherwise, combine according to the aggregation layer saved
         else:
@@ -452,6 +467,7 @@ class MTRFv6Res(MTRFv5Res):
         # tr_out = self.target_role_act(tr_out_raw)
         return Model(inputs=self.input_dict,
                      outputs={'w_out': tw_out, 'r_out': tr_out})
+
 
 class MTRFv8Res(MTRFv6Res):
     def __init__(self, hp_set: HyperparameterSet, **kwargs):
