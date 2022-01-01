@@ -139,7 +139,7 @@ def train_test_eval(model_name,
     # Make callbacks...
     checkpointer = ModelCheckpoint(filepath=os.path.join(checkpoint_dir, 'cp_{epoch:03d}.ckpt'),
                                    monitor='val_loss',
-                                   save_best_only=True,
+                                   save_best_only=False,
                                    verbose=0,
                                    save_weights_only=True)
     stopper = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=hp_set.patience, verbose=1)
