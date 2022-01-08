@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 class EvaluationTask:
-    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False):
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False,
+                 model_obj: MTRFv4Res = None, checkpoint_epoch: int = None):
         # This is needed so the correct model structure is used
         # when loading the model from the checkpoint.
         PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
@@ -45,20 +46,32 @@ class EvaluationTask:
         # correct model structure, using the hyperparameters. This is why the model_name
         # is needed. The hyperparameters are saved in the experiment directory.
         self.hp_set = HyperparameterSet(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'hyperparameters.json'))
-        # Create the model layers using the hyperparameters
-        model_obj: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.hp_set)
-        # Now, we build with training=False, and if we need the embeddings. At this point,
-        # we don't have weights...
-        self.model = model_obj.build_model(training=False, get_embedding=get_embedding)
-        self.model.compile(optimizer=Adam(learning_rate=0.01), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        # NOW WE LOAD THE WEIGHTS. Now, since we don't have bias, we will at least
-        # get a warning, saying that a layer's weights was not loaded. THIS IS FINE.
         checkpoint_dir = os.path.join(SRC_DIR, EXPERIMENT_DIR, experiment_name, 'checkpoints')
-        latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
-        # We won't use all the weights (bias or half the model will be missing),
-        # so do expect_partial() to remove the warnings...
-        self.model.load_weights(latest_checkpoint).expect_partial()
-        logger.info(f'Loaded model and hyperparameters from {os.path.join(self.EXPERIMENT_DIR, self.experiment_name)}')
+
+        # If the user specified a model obj to use directly, then just use that.
+        if model_obj is not None:
+            self.model = model_obj.build_model(training=False, get_embedding=get_embedding)
+            logger.info('Loaded model from given object...')
+        # Or maybe, they provided an explicit checkpoint epoch to load from, instead of the
+        # latest checkpoint
+        else:
+            if checkpoint_epoch is not None:
+                checkpoint = tf.train.load_checkpoint(os.path.join(checkpoint_dir, f'cp_{checkpoint_epoch:03}.ckpt'))
+            else:
+                # Load the weights from the latest checkpoint
+                checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
+            # Whatever weights we ended up reading, create the model layers using
+            # the hyperparameters, and build with training=False, and load the training weights
+            model_obj: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.hp_set)
+            self.model = model_obj.build_model(training=False, get_embedding=get_embedding)
+            # Need to compile before loading weights...
+            self.model.compile(optimizer=Adam(learning_rate=0.01),
+                               loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+            # We won't use all the weights (bias or half the model will be missing),
+            # so do expect_partial() to remove the warnings...
+            self.model.load_weights(checkpoint).expect_partial()
+            logger.info(
+                f'Loaded model and hyperparameters from {os.path.join(self.EXPERIMENT_DIR, self.experiment_name)}')
         # This should be used to save any metrics, that can later be written in
         # the generate report method.
         self.metrics = {}
