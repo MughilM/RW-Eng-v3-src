@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 class EvaluationTask:
     def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False,
-                 model_obj: MTRFv4Res = None, checkpoint_epoch: int = None):
+                 model_obj: MTRFv4Res = None, checkpoint_epoch: int = None, write_report=True):
         # This is needed so the correct model structure is used
         # when loading the model from the checkpoint.
         PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
@@ -40,6 +40,7 @@ class EvaluationTask:
         self.model_name = model_name
         self.experiment_name = experiment_name
         self.lemmatizer = WordNetLemmatizer()
+        self.write_report = write_report
         # Because this is a subclassed model we can't load the model all together,
         # due to unstable serialization for subclassed models. Instead, we can use
         # the checkpoints to load the weights. On the flip side, we have to make the
@@ -118,7 +119,11 @@ class EvaluationTask:
         outputs = self.model(all_inputs, training=False)  # This is a different training argument (changes behaviour
                                                           # of certain layers, like BatchNormalization)
         self._calc_score(outputs)
-        self._generate_report()
+        # Only write the report if we say so...(this is to interface with the
+        # weight randomization experiment, where we DON'T want to override the original
+        # evaluation results)
+        if self.write_report:
+            self._generate_report()
 
 
 class CorrelateTFScores(EvaluationTask):
@@ -127,8 +132,10 @@ class CorrelateTFScores(EvaluationTask):
     noun is supposed to fill, and a thematic fit judgement score. This data should be in
     csv format with columns as verb,noun,role,score.
     """
-    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, dataset_name: str, get_embedding=False):
-        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding)
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, dataset_name: str, get_embedding=False,
+                 model_obj: MTRFv4Res = None, checkpoint_epoch: int = None, write_report=True):
+        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding,
+                         model_obj=model_obj, checkpoint_epoch=checkpoint_epoch, write_report=write_report)
         self.dataset_name = dataset_name
         self.dataset_input_file = os.path.join(self.SRC_DIR, f'evaluation/task_data/{dataset_name}.csv')
         self.dataset = pd.read_csv(self.dataset_input_file)
@@ -244,8 +251,10 @@ class CorrelateTFScores(EvaluationTask):
 
 
 class BicknellTask(EvaluationTask):
-    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False):
-        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding)
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False,
+                 model_obj: MTRFv4Res = None, checkpoint_epoch: int = None, write_report=True):
+        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding,
+                         model_obj=model_obj, checkpoint_epoch=checkpoint_epoch, write_report=write_report)
         self.dataset_name = 'bicknell'
         self.dataset_input_file = os.path.join(SRC_DIR, f'evaluation/task_data/{self.dataset_name}.csv')
         self.dataset = pd.read_csv(self.dataset_input_file)
@@ -367,8 +376,10 @@ class BicknellTask(EvaluationTask):
 
 
 class GS2013Task(EvaluationTask):
-    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False):
-        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding)
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False,
+                 model_obj: MTRFv4Res = None, checkpoint_epoch: int = None, write_report=True):
+        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding,
+                         model_obj=model_obj, checkpoint_epoch=checkpoint_epoch, write_report=write_report)
         self.gs = pd.read_csv(os.path.join(SRC_DIR, 'evaluation/task_data/GS2013.csv'))
         # Lemmatize...
         for noun_col in ['subject', 'object']:
@@ -553,4 +564,6 @@ class GS2013Task(EvaluationTask):
         base_context = self.model(all_inputs['base_verb_input'], training=False)['context_embedding']
         landmark_context = self.model(all_inputs['landmark_verb_input'], training=False)['context_embedding']
         self._calc_score(base_context, landmark_context)
-        self._generate_report()
+        # Same as original EvaluationTask
+        if self.write_report:
+            self._generate_report()
