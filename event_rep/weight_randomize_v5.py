@@ -57,7 +57,7 @@ DATA_PATH = os.path.join(SRC_DIR, 'processed_data')
 EXPERIMENT_NAME = '3a_plus_03_v5_tunespacyavg_1perc'
 
 
-def randomize_network(experiment_name):
+def randomize_network(experiment_name, randomize_embedding=False):
 
     # Generate the huperparameter set from the SRC DIR
     hp_set = HyperparameterSet(os.path.join(EXPERIMENT_DIR, experiment_name, 'hyperparameters.json'))
@@ -134,16 +134,27 @@ def randomize_network(experiment_name):
             continue
         l: Layer = getattr(model_obj, layer_name_cls_att_map[layer_name])
         if weights is not None:
-            if 'embedding' in layer_name:
-                weights_to_set.append(weights.numpy())
+            # See if we are randomizing the embeddings or rest of the network
+            if randomize_embedding:
+                if 'embedding' not in layer_name:
+                    weights_to_set.append(weights.numpy())
+                else:
+                    mean = np.mean(weights.numpy())
+                    stdev = np.std(weights.numpy())
+                    random_weights = np.random.normal(size=weights.numpy().shape, loc=mean, scale=stdev)
+                    weights_to_set.append(random_weights)
             else:
-                mean = np.mean(weights.numpy())
-                stdev = np.std(weights.numpy())
-                random_weights = np.random.normal(size=weights.numpy().shape, loc=mean, scale=stdev)
-                # random_weights = np.random.random(size=weights.numpy().shape) * (maxi - mini) + mini
-                weights_to_set.append(random_weights)
-        if bias is not None:
-            # Embeddings never have biases
+                if 'embedding' in layer_name:
+                    weights_to_set.append(weights.numpy())
+                else:
+                    mean = np.mean(weights.numpy())
+                    stdev = np.std(weights.numpy())
+                    random_weights = np.random.normal(size=weights.numpy().shape, loc=mean, scale=stdev)
+                    # random_weights = np.random.random(size=weights.numpy().shape) * (maxi - mini) + mini
+                    weights_to_set.append(random_weights)
+        if bias is not None and not randomize_embedding:
+            # Embeddings never have biases so don't need to check if we are randomizing embedding
+            # This
             mean = np.mean(weights.numpy())
             stdev = np.std(weights.numpy())
             random_weights = np.random.normal(size=weights.numpy().shape, loc=mean, scale=stdev)
@@ -170,39 +181,61 @@ def randomize_network(experiment_name):
 # override the original scores.
 task_order = ['ferretti_instrument', 'ferretti_location', 'greenberg', 'mcrae', 'pado', 'bicknell', 'gs']
 runs = 3
-randomization_results = pd.DataFrame(columns=task_order[:-1] + ['gs_full', 'gs_low', 'gs_high'],
-                                     index=[f'Run {run}' for run in range(1, runs + 1)])
+randomize_network_results = pd.DataFrame(columns=task_order[:-1] + ['gs_full', 'gs_low', 'gs_high'],
+                                         index=[f'Run {run}' for run in range(1, runs + 1)])
+randomize_embedding_results = pd.DataFrame(columns=task_order[:-1] + ['gs_full', 'gs_low', 'gs_high'],
+                                           index=[f'Run {run}' for run in range(1, runs + 1)])
 for run in range(1, runs + 1):
-    new_model = randomize_network(EXPERIMENT_NAME)
+    network_randomize = randomize_network(EXPERIMENT_NAME)
+    embedding_randomize = randomize_network(EXPERIMENT_NAME, randomize_embedding=True)
     for task in task_order:
         logger.info(f'Running {task}...')
         if task == 'bicknell':
-            evaluator = BicknellTask(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, model_obj=new_model,
+            network_evaluator = BicknellTask(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, model_obj=network_randomize,
                                      write_report=False)
+            embedding_evaluator = BicknellTask(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, model_obj=embedding_randomize,
+                                               write_report=False)
         elif task == 'gs':
             # Load the context embedding for the GS2013 task!!
-            evaluator = GS2013Task(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, get_embedding=True,
-                                   model_obj=new_model, write_report=False)
+            network_evaluator = GS2013Task(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, get_embedding=True,
+                                   model_obj=network_randomize, write_report=False)
+            embedding_evaluator = GS2013Task(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, get_embedding=True,
+                                               model_obj=embedding_randomize,
+                                               write_report=False)
         else:
-            evaluator = CorrelateTFScores(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, task,
-                                          model_obj=new_model, write_report=False)
-        evaluator.run_task()
+            network_evaluator = CorrelateTFScores(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, task,
+                                          model_obj=network_randomize, write_report=False)
+            embedding_evaluator = CorrelateTFScores(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, task,
+                                               model_obj=embedding_randomize,
+                                               write_report=False)
+        network_evaluator.run_task()
+        embedding_evaluator.run_task()
         # Once the task is done, the scores are saved in self.metrics, so we
         # can just read the scores from there.
         if task == 'bicknell':
-            logger.info(f'BICKNELL: {evaluator.metrics["accuracy"] * 100:.3f}%')
-            randomization_results.loc[f'Run {run}', 'bicknell'] = evaluator.metrics['accuracy']
+            logger.info(f'BICKNELL (network): {network_evaluator.metrics["accuracy"] * 100:.3f}%')
+            randomize_network_results.loc[f'Run {run}', 'bicknell'] = network_evaluator.metrics['accuracy']
+            logger.info(f'BICKNELL (embedding): {embedding_evaluator.metrics["accuracy"] * 100:.3f}%')
+            randomize_embedding_results.loc[f'Run {run}', 'bicknell'] = embedding_evaluator.metrics['accuracy']
         elif task == 'gs':
-            logger.info(f'GS2013 (Full, Low, High): {evaluator.metrics["rho"] * 100:.3f}%, '
-                        f'{evaluator.metrics["low_rho"] * 100:.3f}%, {evaluator.metrics["high_rho"] * 100:.3f}')
-            randomization_results.loc[f'Run {run}', ['gs_full', 'gs_low', 'gs_high']] = \
-                [evaluator.metrics['rho'], evaluator.metrics['low_rho'], evaluator.metrics['high_rho']]
+            logger.info(f'GS2013 (Full, Low, High) (network): {network_evaluator.metrics["rho"] * 100:.3f}%, '
+                        f'{network_evaluator.metrics["low_rho"] * 100:.3f}%, {network_evaluator.metrics["high_rho"] * 100:.3f}')
+            randomize_network_results.loc[f'Run {run}', ['gs_full', 'gs_low', 'gs_high']] = \
+                [network_evaluator.metrics['rho'], network_evaluator.metrics['low_rho'], network_evaluator.metrics['high_rho']]
+            logger.info(f'GS2013 (Full, Low, High) (embedding): {embedding_evaluator.metrics["rho"] * 100:.3f}%, '
+                        f'{embedding_evaluator.metrics["low_rho"] * 100:.3f}%, {embedding_evaluator.metrics["high_rho"] * 100:.3f}')
+            randomize_embedding_results.loc[f'Run {run}', ['gs_full', 'gs_low', 'gs_high']] = \
+                [embedding_evaluator.metrics['rho'], embedding_evaluator.metrics['low_rho'],
+                 embedding_evaluator.metrics['high_rho']]
         else:
-            logger.info(f'{task.upper()}: {evaluator.metrics["rho"] * 100:.3f}%')
-            randomization_results.loc[f'Run {run}', task] = evaluator.metrics['rho']
+            logger.info(f'{task.upper()} (network): {network_evaluator.metrics["rho"] * 100:.3f}%')
+            randomize_network_results.loc[f'Run {run}', task] = network_evaluator.metrics['rho']
+            logger.info(f'{task.upper()} (embedding): {embedding_evaluator.metrics["rho"] * 100:.3f}%')
+            randomize_embedding_results.loc[f'Run {run}', task] = embedding_evaluator.metrics['rho']
 
 # Write the randomization results to the
-randomization_results.to_csv(os.path.join(SRC_DIR, EXPERIMENT_DIR, EXPERIMENT_NAME, 'random_network_results.csv'))
+randomize_network_results.to_csv(os.path.join(SRC_DIR, EXPERIMENT_DIR, EXPERIMENT_NAME, 'random_network_results.csv'))
+randomize_embedding_results.to_csv(os.path.join(SRC_DIR, EXPERIMENT_DIR, EXPERIMENT_NAME, 'random_embedding_results.csv'))
 
 
 
