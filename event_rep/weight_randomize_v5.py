@@ -28,6 +28,7 @@ import pprint
 from model_implementation.architecture.models import MTRFv5Res
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
 from evaluation.tasks import CorrelateTFScores, BicknellTask, GS2013Task
+from model_implementation.core.batcher import WordRoleWriter
 
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
@@ -56,11 +57,26 @@ DATA_PATH = os.path.join(SRC_DIR, 'processed_data')
 # The experiment with the model we want to grab from
 EXPERIMENT_NAME = '3a_plus_03_v5_tunespacyavg_1perc'
 
+hp_set = HyperparameterSet(os.path.join(EXPERIMENT_DIR, EXPERIMENT_NAME, 'hyperparameters.json'))
+
+
+def create_dataset_objects(data_ver):
+    data_writer = WordRoleWriter(input_data_dir=os.path.join(DATA_PATH, data_ver),
+                                 output_csv_path=os.path.join(CSV_PIECE_PATH, data_ver),
+                                 batch_size=hp_set.batch_size,
+                                 MISSING_WORD_ID=hp_set.missing_word_id,
+                                 N_ROLES=hp_set.role_vocab_count)
+    data_writer.write_csv_pieces()
+    train_data = data_writer.get_tf_dataset('train')
+    vali_data = data_writer.get_tf_dataset('dev')
+    test_data = data_writer.get_tf_dataset('test')
+
+    return train_data, vali_data, test_data
+
 
 def randomize_network(experiment_name, randomize_embedding=False):
-
     # Generate the huperparameter set from the SRC DIR
-    hp_set = HyperparameterSet(os.path.join(EXPERIMENT_DIR, experiment_name, 'hyperparameters.json'))
+    # hp_set = HyperparameterSet(os.path.join(EXPERIMENT_DIR, experiment_name, 'hyperparameters.json'))
 
     # Create the model, and pull the weights from the latest checkpoint
     model_obj = MTRFv5Res(hp_set)
@@ -170,7 +186,6 @@ def randomize_network(experiment_name, randomize_embedding=False):
             print('Mean:', np.mean(weights_to_set[0]))
             print('Stdev:', np.std(weights_to_set[0]))
 
-
     # Once we have set the correct weights, then build the model...
     return model_obj
     # new_model = model_obj.build_model(training=False, get_embedding=False)
@@ -179,11 +194,13 @@ def randomize_network(experiment_name, randomize_embedding=False):
 # Now, create the Evaluation Task classes, and provide this model
 # object to read from. Also say to NOT generate reports, since that would
 # override the original scores.
+_, _, test_data = create_dataset_objects('v2')
+accuracies = ['Role Acc', 'Word Acc']
 task_order = ['ferretti_instrument', 'ferretti_location', 'greenberg', 'mcrae', 'pado', 'bicknell', 'gs']
 runs = 3
-randomize_network_results = pd.DataFrame(columns=task_order[:-1] + ['gs_full', 'gs_low', 'gs_high'],
+randomize_network_results = pd.DataFrame(columns=accuracies + task_order[:-1] + ['gs_full', 'gs_low', 'gs_high'],
                                          index=[f'Run {run}' for run in range(1, runs + 1)])
-randomize_embedding_results = pd.DataFrame(columns=task_order[:-1] + ['gs_full', 'gs_low', 'gs_high'],
+randomize_embedding_results = pd.DataFrame(columns=accuracies + task_order[:-1] + ['gs_full', 'gs_low', 'gs_high'],
                                            index=[f'Run {run}' for run in range(1, runs + 1)])
 for run in range(1, runs + 1):
     network_randomize = randomize_network(EXPERIMENT_NAME)
@@ -191,23 +208,25 @@ for run in range(1, runs + 1):
     for task in task_order:
         logger.info(f'Running {task}...')
         if task == 'bicknell':
-            network_evaluator = BicknellTask(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, model_obj=network_randomize,
-                                     write_report=False)
-            embedding_evaluator = BicknellTask(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, model_obj=embedding_randomize,
+            network_evaluator = BicknellTask(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME,
+                                             model_obj=network_randomize,
+                                             write_report=False)
+            embedding_evaluator = BicknellTask(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME,
+                                               model_obj=embedding_randomize,
                                                write_report=False)
         elif task == 'gs':
             # Load the context embedding for the GS2013 task!!
             network_evaluator = GS2013Task(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, get_embedding=True,
-                                   model_obj=network_randomize, write_report=False)
+                                           model_obj=network_randomize, write_report=False)
             embedding_evaluator = GS2013Task(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, get_embedding=True,
-                                               model_obj=embedding_randomize,
-                                               write_report=False)
+                                             model_obj=embedding_randomize,
+                                             write_report=False)
         else:
             network_evaluator = CorrelateTFScores(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, task,
-                                          model_obj=network_randomize, write_report=False)
+                                                  model_obj=network_randomize, write_report=False)
             embedding_evaluator = CorrelateTFScores(SRC_DIR, EXPERIMENT_DIR, 'v5', EXPERIMENT_NAME, task,
-                                               model_obj=embedding_randomize,
-                                               write_report=False)
+                                                    model_obj=embedding_randomize,
+                                                    write_report=False)
         network_evaluator.run_task()
         embedding_evaluator.run_task()
         # Once the task is done, the scores are saved in self.metrics, so we
@@ -221,7 +240,8 @@ for run in range(1, runs + 1):
             logger.info(f'GS2013 (Full, Low, High) (network): {network_evaluator.metrics["rho"] * 100:.3f}%, '
                         f'{network_evaluator.metrics["low_rho"] * 100:.3f}%, {network_evaluator.metrics["high_rho"] * 100:.3f}')
             randomize_network_results.loc[f'Run {run}', ['gs_full', 'gs_low', 'gs_high']] = \
-                [network_evaluator.metrics['rho'], network_evaluator.metrics['low_rho'], network_evaluator.metrics['high_rho']]
+                [network_evaluator.metrics['rho'], network_evaluator.metrics['low_rho'],
+                 network_evaluator.metrics['high_rho']]
             logger.info(f'GS2013 (Full, Low, High) (embedding): {embedding_evaluator.metrics["rho"] * 100:.3f}%, '
                         f'{embedding_evaluator.metrics["low_rho"] * 100:.3f}%, {embedding_evaluator.metrics["high_rho"] * 100:.3f}')
             randomize_embedding_results.loc[f'Run {run}', ['gs_full', 'gs_low', 'gs_high']] = \
@@ -232,10 +252,19 @@ for run in range(1, runs + 1):
             randomize_network_results.loc[f'Run {run}', task] = network_evaluator.metrics['rho']
             logger.info(f'{task.upper()} (embedding): {embedding_evaluator.metrics["rho"] * 100:.3f}%')
             randomize_embedding_results.loc[f'Run {run}', task] = embedding_evaluator.metrics['rho']
+        # Do our test metrics
+        model = network_randomize.build_model(training=True, get_embedding=False)
+        model.compile(optimizer=Adam(learning_rate=0.01), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        test_metrics = model.evaluate(test_data)
+        randomize_network_results.loc[f'Run {run}', 'Role Acc'] = test_metrics[3]
+        randomize_network_results.loc[f'Run {run}', 'Word Acc'] = test_metrics[4]
+        model = embedding_randomize.build_model(training=True, get_embedding=False)
+        model.compile(optimizer=Adam(learning_rate=0.01), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        test_metrics = model.evaluate(test_data)
+        randomize_embedding_results.loc[f'Run {run}', 'Role Acc'] = test_metrics[3]
+        randomize_embedding_results.loc[f'Run {run}', 'Word Acc'] = test_metrics[4]
 
 # Write the randomization results to the
 randomize_network_results.to_csv(os.path.join(SRC_DIR, EXPERIMENT_DIR, EXPERIMENT_NAME, 'random_network_results.csv'))
-randomize_embedding_results.to_csv(os.path.join(SRC_DIR, EXPERIMENT_DIR, EXPERIMENT_NAME, 'random_embedding_results.csv'))
-
-
-
+randomize_embedding_results.to_csv(
+    os.path.join(SRC_DIR, EXPERIMENT_DIR, EXPERIMENT_NAME, 'random_embedding_results.csv'))
