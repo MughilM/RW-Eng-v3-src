@@ -61,7 +61,8 @@ PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
     'v4': MTRFv4Res,
     'v5': MTRFv5Res,
     'v6': MTRFv6Res,
-    'v8': MTRFv8Res
+    'v8': MTRFv8Res,
+    'v9': MTRFv9Res
 }
 
 # Make the directories if they don't already exist.
@@ -103,7 +104,14 @@ def train_test_eval(model_name,
                     test_dataset: tf.data.Dataset,
                     load_previous: bool):
     # Make the model object!
-    model_obj: MTRFv4Res = PARAM_TO_MODEL[model_name](hp_set, pretrained_emb_dir=PRETRAINED_DIR)
+    # If it's v9, then we need to provide the original experiment name
+    # We have appended the original name with '_v9' at the end
+    if model_name == 'v9':
+        experiment_name_dir = os.path.join(EXPERIMENT_DIR, experiment_name)
+        # The experiment name has '_v9' at the end, don't include this...
+        model_obj = MTRFv9Res(hp_set, experiment_name_dir[:-3], pretrained_emb_dir=PRETRAINED_DIR)
+    else:
+        model_obj: MTRFv4Res = PARAM_TO_MODEL[model_name](hp_set, pretrained_emb_dir=PRETRAINED_DIR)
     model = model_obj.build_model()
     logger.info('Clean model summary:')
     # Extra parentheses for build() because input_shapes are not required.
@@ -136,6 +144,7 @@ def train_test_eval(model_name,
     # Put model image in the model artifacts for reference afterwards.
     tf.keras.utils.plot_model(model, to_file=os.path.join(model_artifact_dir, f'{model_name}.png'),
                               show_shapes=True)
+    print('Plotted Model and saved.')
     # Make callbacks...
     checkpointer = ModelCheckpoint(filepath=os.path.join(checkpoint_dir, 'cp_{epoch:03d}.ckpt'),
                                    monitor='val_loss',
@@ -323,8 +332,17 @@ if __name__ == '__main__':
         parser.error('Evaluation is enabled, but the "all" option is included along with other'
                      'evaluation tasks. Please double check the task list.')
         sys.exit(1)
-
-    if args.experiment_name == '':
+    # Check if we are doing v9. If we are, then we can't have
+    # an empty experiment name, and we also should append '_v9'
+    # to the provided experiment name.
+    if args.model_name == 'v9':
+        if args.experiment_name == '':
+            parser.error('Experiment name must be provided in order to run a v9 model.')
+            sys.exit(1)
+        else:
+            experiment_name = f'{args.experiment_name}_v9'
+    # If it's just empty, then fill the name with the current time
+    elif args.experiment_name == '':
         experiment_name = f"{time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())}_{args.model_name}_" \
                           f"{args.data_version}"
     else:
