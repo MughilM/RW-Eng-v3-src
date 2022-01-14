@@ -610,6 +610,7 @@ class MTRFv9Res(MTRFv5Res):
                                                         weights=[layer.get_weights()[0]])
                 # self.target_role_output_no_bias.set_weights([layer.get_weights()[0]])
         # The "extra layers", one to flatten to multiply, and a single Dense layer after that...
+        self.concatenate_embeddings = Concatenate(name='concatenate_embedding')
         self.flatten_embeddings = Flatten(name='flatten_embedding')
         self.embedding_projection = Dense(300, activation='relu', name='embedding_projection')
 
@@ -623,41 +624,42 @@ class MTRFv9Res(MTRFv5Res):
             word_embedding_out = self.word_embed_multi([word_embedding_out, mask])
         # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...
         # ...but our default is nonzero...
-        word_embedding_out = self.word_dropout(word_embedding_out)
-        role_embedding_out = self.role_dropout(role_embedding_out)
-        # Concatenate the two embeddings
-        total_embeddings = self.embedding_multiply([word_embedding_out, role_embedding_out])
+        # word_embedding_out = self.word_dropout(word_embedding_out)
+        # role_embedding_out = self.role_dropout(role_embedding_out)
+        # Create outputs for the target role and word as well
+        # We won't pass them through dropout and stuff
+        target_word_embedding_out = self.word_embedding(self.target_word)
+        target_role_embedding_out = self.role_embedding(self.target_role)
+        # Flatten each one, and concatenate them...
+        word_embedding_out = self.flatten_embeddings(word_embedding_out)
+        role_embedding_out = self.flatten_embeddings(role_embedding_out)
+        target_word_embedding_out = self.flatten_embeddings(target_word_embedding_out)
+        target_role_embedding_out = self.flatten_embeddings(target_role_embedding_out)
+        # Concatenate ALL the embeddings
+        total_embeddings = self.concatenate_embeddings([target_word_embedding_out, word_embedding_out,
+                                                        role_embedding_out, target_role_embedding_out])
 
         ##### NOW THEN
         # Once we have multiplied the two embeddings, we now flatten it,
         # pass it through our Dense projection layer, and connect directly
         # to the multiply's at the end (the ones with the target embeddings).
-        flattened_embedding = self.flatten_embeddings(total_embeddings)
-        projection_embedding = self.embedding_projection(flattened_embedding)
+        # flattened_embedding = self.flatten_embeddings(total_embeddings)
+        projection_embedding = self.embedding_projection(total_embeddings)
 
         # If we need to get the embedding for use with the GS test,
         # then use the output from the projection.
         if get_embedding:
             return Model(inputs=self.input_dict,
                          outputs={'context_embedding': projection_embedding})
-        # Create target role and word embeddings multiplied with the projection.
-        # Note the crossing of inputs into the other's hidden layer.
-        twh_out = self.target_word_hidden([
-            self.weight_context_word(projection_embedding),
-            self.target_role_flatten(self.target_role_drop(self.role_embedding(self.target_role)))
-        ])
-        trh_out = self.target_role_hidden([
-            self.weight_context_role(projection_embedding),
-            self.target_word_flatten(self.target_word_drop(self.word_embedding(self.target_word)))
-        ])
-        # Forward through the output layers.
+
+        # Forward through the single projection embedding to the output layers
         # If training is False, then DO NOT USE THE BIAS IN THE OUTPUT LAYERS...
         if not training:
-            tw_out = self.target_word_output_no_bias(twh_out)
-            tr_out = self.target_role_output_no_bias(trh_out)
+            tw_out = self.target_word_output_no_bias(projection_embedding)
+            tr_out = self.target_role_output_no_bias(projection_embedding)
         else:
-            tw_out = self.target_word_output(twh_out)
-            tr_out = self.target_role_output(trh_out)
+            tw_out = self.target_word_output(projection_embedding)
+            tr_out = self.target_role_output(projection_embedding)
         # tw_out = self.target_word_act(tw_out_raw)
         # tr_out = self.target_role_act(tr_out_raw)
         return Model(inputs=self.input_dict,

@@ -107,6 +107,9 @@ def train_test_eval(model_name,
     # If it's v9, then we need to provide the original experiment name
     # We have appended the original name with '_v9' at the end
     if model_name == 'v9':
+        # If it's v9, then we need to freeze the word and role embeddings
+        hp_set.freeze_role_embeddings = True
+        hp_set.freeze_word_embeddings = True
         experiment_name_dir = os.path.join(EXPERIMENT_DIR, experiment_name)
         # The experiment name has '_v9' at the end, don't include this...
         model_obj = MTRFv9Res(hp_set, experiment_name_dir[:-3], pretrained_emb_dir=PRETRAINED_DIR)
