@@ -57,7 +57,7 @@ class EvaluationTask:
         # latest checkpoint
         else:
             if checkpoint_epoch is not None:
-                checkpoint = tf.train.load_checkpoint(os.path.join(checkpoint_dir, f'cp_{checkpoint_epoch:03}.ckpt'))
+                checkpoint = os.path.join(checkpoint_dir, f'cp_{checkpoint_epoch:03}.ckpt')
             else:
                 # Load the weights from the latest checkpoint
                 checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
