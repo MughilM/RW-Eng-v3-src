@@ -591,23 +591,23 @@ class MTRFv9Res(MTRFv5Res):
                 # print(layer.weights)
                 # print(layer.bias)
                 self.target_word_output = Dense(self.hp_set.word_vocab_count, name='w_out', activation='softmax',
-                                                weights=layer.get_weights())
+                                                weights=layer.get_weights(), trainable=False)
                 # self.target_word_output.set_weights(layer.get_weights())
                 # No bias
                 self.target_word_output_no_bias = Dense(self.hp_set.word_vocab_count, name='w_out',
                                                         activation='softmax', use_bias=False,
-                                                        weights=[layer.get_weights()[0]])
+                                                        weights=[layer.get_weights()[0]], trainable=False)
                 # self.target_word_output_no_bias.set_weights([layer.get_weights()[0]])
             elif layer.name == 'r_out':
                 # print(layer.weights)
                 # print(layer.bias)
                 self.target_role_output = Dense(self.hp_set.role_vocab_count, name='r_out', activation='softmax',
-                                                weights=layer.get_weights())
+                                                weights=layer.get_weights(), trainable=False)
                 # self.target_role_output.set_weights(layer.get_weights())
                 # No bias
                 self.target_role_output_no_bias = Dense(self.hp_set.role_vocab_count, name='r_out',
                                                         activation='softmax', use_bias=False,
-                                                        weights=[layer.get_weights()[0]])
+                                                        weights=[layer.get_weights()[0]], trainable=False)
                 # self.target_role_output_no_bias.set_weights([layer.get_weights()[0]])
         # The "extra layers", one to flatten to multiply, and a single Dense layer after that...
         self.concatenate_embeddings = Concatenate(name='concatenate_embedding')
