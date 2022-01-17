@@ -32,7 +32,8 @@ class EvaluationTask:
             'v4': MTRFv4Res,
             'v5': MTRFv5Res,
             'v6': MTRFv6Res,
-            'v8': MTRFv8Res
+            'v8': MTRFv8Res,
+            'v9': MTRFv9Res
         }
         self.SRC_DIR = SRC_DIR
         self.EXPERIMENT_DIR = EXPERIMENT_DIR
@@ -46,7 +47,10 @@ class EvaluationTask:
         # is needed. The hyperparameters are saved in the experiment directory.
         self.hp_set = HyperparameterSet(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'hyperparameters.json'))
         # Create the model layers using the hyperparameters
-        model_obj: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.hp_set)
+        if self.model_name == 'v9':
+            model_obj = MTRFv9Res(self.hp_set, os.path.join(self.EXPERIMENT_DIR, self.experiment_name)[:-3])
+        else:
+            model_obj: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.hp_set)
         # Now, we build with training=False, and if we need the embeddings. At this point,
         # we don't have weights...
         self.model = model_obj.build_model(training=False, get_embedding=get_embedding)

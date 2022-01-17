@@ -17,6 +17,7 @@ import os
 import glob
 import time
 import logging
+import sys
 
 
 class WordRoleWriter:
@@ -41,6 +42,13 @@ class WordRoleWriter:
         self.overwrite = overwrite
 
         self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+
+        handler = logging.StreamHandler(sys.stdout)
+        # create a logging format
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
 
         # Make the directories in the output path for train, dev, and test
         for directory in [train_dir, val_dir, test_dir]:

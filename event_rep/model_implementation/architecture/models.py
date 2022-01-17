@@ -13,6 +13,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import *
 from tensorflow.keras.initializers import glorot_uniform, constant
+from tensorflow.keras.optimizers import Adam
 import tensorflow.keras.backend as K
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
 
@@ -539,6 +540,126 @@ class MTRFv8Res(MTRFv6Res):
         else:
             tw_out = self.target_word_output(twh_out)
             tr_out = self.target_role_output(trh_out)
+        # tw_out = self.target_word_act(tw_out_raw)
+        # tr_out = self.target_role_act(tr_out_raw)
+        return Model(inputs=self.input_dict,
+                     outputs={'w_out': tw_out, 'r_out': tr_out})
+
+
+class MTRFv9Res(MTRFv5Res):
+    def __init__(self, hp_set: HyperparameterSet, experiment_name_dir, pretrained_emb_dir=None):
+        super().__init__(hp_set, pretrained_emb_dir=pretrained_emb_dir)
+        # For v9, we get embeddings from the experiment and build a model where
+        # the embeddings essentially connect directly to the outputs. For that we obviously
+        # need what the embeddings were.
+        self.experiment_name_dir = experiment_name_dir
+        # The hp set should correspond to the model we are pulling from...
+        self.orig_model_obj = MTRFv5Res(self.hp_set)
+        # training=True, because we want the bias (since we would train)
+        self.orig_model = self.orig_model_obj.build_model(training=True, get_embedding=False)
+        self.orig_model.compile(optimizer=Adam(learning_rate=0.01), loss='sparse_categorical_crossentropy',
+                                metrics=['accuracy'])
+        # NOW WE LOAD THE WEIGHTS. Now, since we don't have bias, we will at least
+        # get a warning, saying that a layer's weights was not loaded. THIS IS FINE.
+        checkpoint_dir = os.path.join(self.experiment_name_dir, 'checkpoints')
+        print(f'Checkpoint directory: {checkpoint_dir}')
+        latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
+        print(f'Latest checkponit: {latest_checkpoint}')
+        # We won't use all the weights (bias or half the model will be missing),
+        # so do expect_partial() to remove the warnings...
+        self.orig_model.load_weights(latest_checkpoint).expect_partial()
+
+        # Now, that we have the original model, we go through the layers,
+        # find the embeddings and output layers, and bring the weights over...
+        # ...and freeze them as well. The word embedding name varies based on the type of embedding
+        for layer in self.orig_model.layers:
+            if layer.name == f'word_embedding_{self.hp_set.embedding_type}_{self.hp_set.oov}':
+                self.word_embedding = Embedding(input_dim=self.hp_set.word_vocab_count,
+                                                output_dim=self.hp_set.word_embedding_dimension,
+                                                embeddings_initializer=layer.weights[0],
+                                                name=layer.name,
+                                                trainable=not self.hp_set.freeze_word_embeddings)
+            elif layer.name == 'role_embedding':
+                self.role_embedding = self.role_embedding = Embedding(input_dim=self.hp_set.role_vocab_count,
+                                                                      output_dim=self.hp_set.role_embedding_dimension,
+                                                                      embeddings_initializer=constant(layer.weights[0]),
+                                                                      name='role_embedding',
+                                                                      trainable=not self.hp_set.freeze_role_embeddings)
+            # For outputs, just like we have two separate layers for with and without bias,
+            # we need it here. The weight initialization is slightly different...
+            elif layer.name == 'w_out':
+                # print(layer.weights)
+                # print(layer.bias)
+                self.target_word_output = Dense(self.hp_set.word_vocab_count, name='w_out', activation='softmax',
+                                                weights=layer.get_weights(), trainable=False)
+                # self.target_word_output.set_weights(layer.get_weights())
+                # No bias
+                self.target_word_output_no_bias = Dense(self.hp_set.word_vocab_count, name='w_out',
+                                                        activation='softmax', use_bias=False,
+                                                        weights=[layer.get_weights()[0]], trainable=False)
+                # self.target_word_output_no_bias.set_weights([layer.get_weights()[0]])
+            elif layer.name == 'r_out':
+                # print(layer.weights)
+                # print(layer.bias)
+                self.target_role_output = Dense(self.hp_set.role_vocab_count, name='r_out', activation='softmax',
+                                                weights=layer.get_weights(), trainable=False)
+                # self.target_role_output.set_weights(layer.get_weights())
+                # No bias
+                self.target_role_output_no_bias = Dense(self.hp_set.role_vocab_count, name='r_out',
+                                                        activation='softmax', use_bias=False,
+                                                        weights=[layer.get_weights()[0]], trainable=False)
+                # self.target_role_output_no_bias.set_weights([layer.get_weights()[0]])
+        # The "extra layers", one to flatten to multiply, and a single Dense layer after that...
+        self.concatenate_embeddings = Concatenate(name='concatenate_embedding')
+        self.flatten_embeddings = Flatten(name='flatten_embedding')
+        self.embedding_projection = Dense(300, activation='relu', name='embedding_projection')
+
+    def build_model(self, training=True, get_embedding=False):
+        word_embedding_out = self.word_embedding(self.input_words)
+        role_embedding_out = self.role_embedding(self.input_roles)
+        # Now zero out the missing word embeddings if need be.
+        if self.hp_set.zero_out_miss_embedding:
+            mask = self.embedding_mask(self.input_words)
+            # Update the embeddings
+            word_embedding_out = self.word_embed_multi([word_embedding_out, mask])
+        # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...
+        # ...but our default is nonzero...
+        # word_embedding_out = self.word_dropout(word_embedding_out)
+        # role_embedding_out = self.role_dropout(role_embedding_out)
+        # Create outputs for the target role and word as well
+        # We won't pass them through dropout and stuff
+        target_word_embedding_out = self.word_embedding(self.target_word)
+        target_role_embedding_out = self.role_embedding(self.target_role)
+        # Flatten each one, and concatenate them...
+        word_embedding_out = self.flatten_embeddings(word_embedding_out)
+        role_embedding_out = self.flatten_embeddings(role_embedding_out)
+        target_word_embedding_out = self.flatten_embeddings(target_word_embedding_out)
+        target_role_embedding_out = self.flatten_embeddings(target_role_embedding_out)
+        # Concatenate ALL the embeddings
+        total_embeddings = self.concatenate_embeddings([target_word_embedding_out, word_embedding_out,
+                                                        role_embedding_out, target_role_embedding_out])
+
+        ##### NOW THEN
+        # Once we have multiplied the two embeddings, we now flatten it,
+        # pass it through our Dense projection layer, and connect directly
+        # to the multiply's at the end (the ones with the target embeddings).
+        # flattened_embedding = self.flatten_embeddings(total_embeddings)
+        projection_embedding = self.embedding_projection(total_embeddings)
+
+        # If we need to get the embedding for use with the GS test,
+        # then use the output from the projection.
+        if get_embedding:
+            return Model(inputs=self.input_dict,
+                         outputs={'context_embedding': projection_embedding})
+
+        # Forward through the single projection embedding to the output layers
+        # If training is False, then DO NOT USE THE BIAS IN THE OUTPUT LAYERS...
+        if not training:
+            tw_out = self.target_word_output_no_bias(projection_embedding)
+            tr_out = self.target_role_output_no_bias(projection_embedding)
+        else:
+            tw_out = self.target_word_output(projection_embedding)
+            tr_out = self.target_role_output(projection_embedding)
         # tw_out = self.target_word_act(tw_out_raw)
         # tr_out = self.target_role_act(tr_out_raw)
         return Model(inputs=self.input_dict,
