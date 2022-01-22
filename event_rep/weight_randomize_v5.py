@@ -63,7 +63,7 @@ hp_set = HyperparameterSet(os.path.join(EXPERIMENT_DIR, EXPERIMENT_NAME, 'hyperp
 def create_dataset_objects(data_ver):
     data_writer = WordRoleWriter(input_data_dir=os.path.join(DATA_PATH, data_ver),
                                  output_csv_path=os.path.join(CSV_PIECE_PATH, data_ver),
-                                 batch_size=hp_set.batch_size,
+                                 batch_size=512,
                                  MISSING_WORD_ID=hp_set.missing_word_id,
                                  N_ROLES=hp_set.role_vocab_count)
     data_writer.write_csv_pieces()
@@ -194,7 +194,7 @@ def randomize_network(experiment_name, randomize_embedding=False):
 # Now, create the Evaluation Task classes, and provide this model
 # object to read from. Also say to NOT generate reports, since that would
 # override the original scores.
-_, _, test_data = create_dataset_objects('v2')
+_, _, test_data = create_dataset_objects('exp10_0.01-16-16-Roles2Args3Mods-NoFrAn-v2')
 accuracies = ['Role Acc', 'Word Acc']
 task_order = ['ferretti_instrument', 'ferretti_location', 'greenberg', 'mcrae', 'pado', 'bicknell', 'gs']
 runs = 3
@@ -203,6 +203,7 @@ randomize_network_results = pd.DataFrame(columns=accuracies + task_order[:-1] + 
 randomize_embedding_results = pd.DataFrame(columns=accuracies + task_order[:-1] + ['gs_full', 'gs_low', 'gs_high'],
                                            index=[f'Run {run}' for run in range(1, runs + 1)])
 for run in range(1, runs + 1):
+    logger.info(f'Run {run}')
     network_randomize = randomize_network(EXPERIMENT_NAME)
     embedding_randomize = randomize_network(EXPERIMENT_NAME, randomize_embedding=True)
     for task in task_order:
@@ -252,17 +253,21 @@ for run in range(1, runs + 1):
             randomize_network_results.loc[f'Run {run}', task] = network_evaluator.metrics['rho']
             logger.info(f'{task.upper()} (embedding): {embedding_evaluator.metrics["rho"] * 100:.3f}%')
             randomize_embedding_results.loc[f'Run {run}', task] = embedding_evaluator.metrics['rho']
-        # Do our test metrics
-        model = network_randomize.build_model(training=True, get_embedding=False)
-        model.compile(optimizer=Adam(learning_rate=0.01), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        test_metrics = model.evaluate(test_data)
-        randomize_network_results.loc[f'Run {run}', 'Role Acc'] = test_metrics[3]
-        randomize_network_results.loc[f'Run {run}', 'Word Acc'] = test_metrics[4]
-        model = embedding_randomize.build_model(training=True, get_embedding=False)
-        model.compile(optimizer=Adam(learning_rate=0.01), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        test_metrics = model.evaluate(test_data)
-        randomize_embedding_results.loc[f'Run {run}', 'Role Acc'] = test_metrics[3]
-        randomize_embedding_results.loc[f'Run {run}', 'Word Acc'] = test_metrics[4]
+    # Do our test metrics
+    model = network_randomize.build_model(training=True, get_embedding=False)
+    model.compile(optimizer=Adam(learning_rate=0.01), loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'])
+    logger.info('Evaluating network randomizer...')
+    test_metrics = model.evaluate(test_data)
+    randomize_network_results.loc[f'Run {run}', 'Role Acc'] = test_metrics[3]
+    randomize_network_results.loc[f'Run {run}', 'Word Acc'] = test_metrics[4]
+    model = embedding_randomize.build_model(training=True, get_embedding=False)
+    model.compile(optimizer=Adam(learning_rate=0.01), loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'])
+    logger.info('Evaluating embedding randomizer...')
+    test_metrics = model.evaluate(test_data)
+    randomize_embedding_results.loc[f'Run {run}', 'Role Acc'] = test_metrics[3]
+    randomize_embedding_results.loc[f'Run {run}', 'Word Acc'] = test_metrics[4]
 
 # Write the randomization results to the
 randomize_network_results.to_csv(os.path.join(SRC_DIR, EXPERIMENT_DIR, EXPERIMENT_NAME, 'random_network_results.csv'))

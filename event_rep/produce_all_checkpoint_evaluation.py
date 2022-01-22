@@ -24,7 +24,10 @@ import numpy as np
 import pandas as pd
 import nltk
 
+from tensorflow.keras.optimizers import Adam
+
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
+from model_implementation.core.batcher import WordRoleWriter
 from model_implementation.architecture.models import *
 from evaluation.tasks import CorrelateTFScores, BicknellTask, GS2013Task
 
@@ -101,12 +104,32 @@ if __name__ == '__main__':
     checkpoint_nums = [int(re.search(r'(\d+)', os.path.basename(check))[0]) for check in check_files]
     logger.info(f'Checkpoint Numbers - {checkpoint_nums}')
 
+    # Get the dataset as well
+    data_writer = WordRoleWriter(input_data_dir=os.path.join(DATA_PATH, args.data_version),
+                                 output_csv_path=os.path.join(CSV_PIECE_PATH, args.data_version),
+                                 batch_size=512,
+                                 MISSING_WORD_ID=50001,
+                                 N_ROLES=7)
+    data_writer.write_csv_pieces()
+    test_data = data_writer.get_tf_dataset('test')
+
     # For each checkpoint number, run the evaluation tasks, BUT DON'T SAVE THEM
     # to the directory.
     data = []
     for check_num in checkpoint_nums:
         results = [check_num]
         logger.info(f'Running evaluation for checkpoint {check_num}...')
+        hp_set = HyperparameterSet(os.path.join(EXPERIMENT_DIR, args.experiment_name, 'hyperparameters.json'))
+        checkpoint_dir = os.path.join(SRC_DIR, EXPERIMENT_DIR, args.experiment_name, 'checkpoints')
+        model_obj = MTRFv5Res(hp_set)
+        model = model_obj.build_model()
+        model.compile(optimizer=Adam(learning_rate=0.01), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        model.load_weights(os.path.join(checkpoint_dir, f'cp_{check_num:03}.ckpt'))
+        # Evaluate our test data on this epoch...
+        test_metrics = model.evaluate(test_data)
+        test_keys = ['Loss', 'Role Loss', 'Word Loss', 'Role Accuracy', 'Word Accuracy']
+        test_metrics_json = {k: v for k, v in zip(test_keys, test_metrics)}
+        results.extend([test_metrics_json['Role Accuracy'], test_metrics_json['Word Accuracy']])
         for task in ALL_EVAL_TASKS:
             logger.info(f'Running {task}')
             if task == 'bicknell':
@@ -134,7 +157,7 @@ if __name__ == '__main__':
         data.append(results)
 
     # Create a data frame
-    evaluation_df = pd.DataFrame(data, columns=['Checkpoint Epoch'] + ALL_EVAL_TASKS + ['low_gs', 'high_gs'])
+    evaluation_df = pd.DataFrame(data, columns=['Checkpoint Epoch', 'Role Acc', 'Word Acc'] + ALL_EVAL_TASKS + ['low_gs', 'high_gs'])
     evaluation_df.set_index(['Checkpoint Epoch'], inplace=True)
     # Save as csv in the experiment directory
     evaluation_df.to_csv(os.path.join(EXPERIMENT_DIR, args.experiment_name, 'all_eval_results.csv'))

@@ -335,7 +335,7 @@ class BicknellTask(EvaluationTask):
         self.metrics['num_correct'] = self.dataset.loc[self.dataset['cong_prob'] >
                                                                  self.dataset['incong_prob'], :].shape[0]
         self.metrics['num_incorrect'] = self.dataset.shape[0] - self.metrics['num_correct_m']
-        self.metrics['accuracy'] = self.metrics['num_correct_m'] / self.dataset.shape[0]
+        self.metrics['accuracy'] = self.metrics['num_correct'] / self.dataset.shape[0]
 
     def _generate_report(self):
         os.makedirs(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'evaluation_results'), exist_ok=True)
