@@ -587,32 +587,35 @@ class MTRFv9Res(MTRFv5Res):
                                                                       trainable=not self.hp_set.freeze_role_embeddings)
             # For outputs, just like we have two separate layers for with and without bias,
             # we need it here. The weight initialization is slightly different...
-            elif layer.name == 'w_out':
-                # print(layer.weights)
-                # print(layer.bias)
-                self.target_word_output = Dense(self.hp_set.word_vocab_count, name='w_out', activation='softmax',
-                                                weights=layer.get_weights(), trainable=False)
-                # self.target_word_output.set_weights(layer.get_weights())
-                # No bias
-                self.target_word_output_no_bias = Dense(self.hp_set.word_vocab_count, name='w_out',
-                                                        activation='softmax', use_bias=False,
-                                                        weights=[layer.get_weights()[0]], trainable=False)
-                # self.target_word_output_no_bias.set_weights([layer.get_weights()[0]])
-            elif layer.name == 'r_out':
-                # print(layer.weights)
-                # print(layer.bias)
-                self.target_role_output = Dense(self.hp_set.role_vocab_count, name='r_out', activation='softmax',
-                                                weights=layer.get_weights(), trainable=False)
-                # self.target_role_output.set_weights(layer.get_weights())
-                # No bias
-                self.target_role_output_no_bias = Dense(self.hp_set.role_vocab_count, name='r_out',
-                                                        activation='softmax', use_bias=False,
-                                                        weights=[layer.get_weights()[0]], trainable=False)
+            # elif layer.name == 'w_out':
+            #     # print(layer.weights)
+            #     # print(layer.bias)
+            #     self.target_word_output = Dense(self.hp_set.word_vocab_count, name='w_out', activation='softmax',
+            #                                     weights=layer.get_weights(), trainable=False)
+            #     # self.target_word_output.set_weights(layer.get_weights())
+            #     # No bias
+            #     self.target_word_output_no_bias = Dense(self.hp_set.word_vocab_count, name='w_out',
+            #                                             activation='softmax', use_bias=False,
+            #                                             weights=[layer.get_weights()[0]], trainable=False)
+            #     # self.target_word_output_no_bias.set_weights([layer.get_weights()[0]])
+            # elif layer.name == 'r_out':
+            #     # print(layer.weights)
+            #     # print(layer.bias)
+            #     self.target_role_output = Dense(self.hp_set.role_vocab_count, name='r_out', activation='softmax',
+            #                                     weights=layer.get_weights(), trainable=False)
+            #     # self.target_role_output.set_weights(layer.get_weights())
+            #     # No bias
+            #     self.target_role_output_no_bias = Dense(self.hp_set.role_vocab_count, name='r_out',
+            #                                             activation='softmax', use_bias=False,
+            #                                             weights=[layer.get_weights()[0]], trainable=False)
                 # self.target_role_output_no_bias.set_weights([layer.get_weights()[0]])
         # The "extra layers", one to flatten to multiply, and a single Dense layer after that...
         self.concatenate_embeddings = Concatenate(name='concatenate_embedding')
-        self.flatten_embeddings = Flatten(name='flatten_embedding')
+        self.flatten_word_embedding = Flatten(name='flatten_word_embedding')
+        self.flatten_role_embedding = Flatten(name='flatten_role_embedding')
         self.embedding_projection = Dense(300, activation='relu', name='embedding_projection')
+        self.concatenate_target_role = Concatenate(name='concatenate_target_role')
+        self.concatenate_target_word = Concatenate(name='concatenate_target_word')
 
     def build_model(self, training=True, get_embedding=False):
         word_embedding_out = self.word_embedding(self.input_words)
@@ -631,13 +634,12 @@ class MTRFv9Res(MTRFv5Res):
         target_word_embedding_out = self.word_embedding(self.target_word)
         target_role_embedding_out = self.role_embedding(self.target_role)
         # Flatten each one, and concatenate them...
-        word_embedding_out = self.flatten_embeddings(word_embedding_out)
-        role_embedding_out = self.flatten_embeddings(role_embedding_out)
-        target_word_embedding_out = self.flatten_embeddings(target_word_embedding_out)
-        target_role_embedding_out = self.flatten_embeddings(target_role_embedding_out)
+        word_embedding_out = self.flatten_word_embedding(word_embedding_out)
+        role_embedding_out = self.flatten_role_embedding(role_embedding_out)
+        target_word_embedding_out = self.target_word_flatten(target_word_embedding_out)
+        target_role_embedding_out = self.target_role_flatten(target_role_embedding_out)
         # Concatenate ALL the embeddings
-        total_embeddings = self.concatenate_embeddings([target_word_embedding_out, word_embedding_out,
-                                                        role_embedding_out, target_role_embedding_out])
+        total_embeddings = self.concatenate_embeddings([word_embedding_out, role_embedding_out])
 
         ##### NOW THEN
         # Once we have multiplied the two embeddings, we now flatten it,
@@ -648,18 +650,20 @@ class MTRFv9Res(MTRFv5Res):
 
         # If we need to get the embedding for use with the GS test,
         # then use the output from the projection.
-        if get_embedding:
-            return Model(inputs=self.input_dict,
-                         outputs={'context_embedding': projection_embedding})
-
+        # if get_embedding:
+        #     return Model(inputs=self.input_dict,
+        #                  outputs={'context_embedding': projection_embedding})
+        # Concatenate with target role and word
+        concatenated_target_role = self.concatenate_target_role([target_role_embedding_out, projection_embedding])
+        concatenated_target_word = self.concatenate_target_word([target_word_embedding_out, projection_embedding])
         # Forward through the single projection embedding to the output layers
         # If training is False, then DO NOT USE THE BIAS IN THE OUTPUT LAYERS...
         if not training:
-            tw_out = self.target_word_output_no_bias(projection_embedding)
-            tr_out = self.target_role_output_no_bias(projection_embedding)
+            tw_out = self.target_word_output_no_bias(concatenated_target_role)
+            tr_out = self.target_role_output_no_bias(concatenated_target_word)
         else:
-            tw_out = self.target_word_output(projection_embedding)
-            tr_out = self.target_role_output(projection_embedding)
+            tw_out = self.target_word_output(concatenated_target_role)
+            tr_out = self.target_role_output(concatenated_target_word)
         # tw_out = self.target_word_act(tw_out_raw)
         # tr_out = self.target_role_act(tr_out_raw)
         return Model(inputs=self.input_dict,
