@@ -73,7 +73,7 @@ for directory in [EXPERIMENT_DIR, PRETRAINED_DIR, CSV_PIECE_PATH, DATA_PATH]:
 ROLE_SET = Roles2Args3Mods
 
 # The list of all evaluation tasks
-ALL_EVAL_TASKS = ['pado', 'mcrae', 'greenberg', 'bicknell', 'gs', 'ferretti_instrument', 'ferretti_location']
+ALL_EVAL_TASKS = ['pado', 'mcrae', 'greenberg', 'bicknell', 'ferretti_instrument', 'ferretti_location', 'gs']
 
 # Download wordnet packages from NLTK
 nltk.download('wordnet')

@@ -613,7 +613,7 @@ class MTRFv9Res(MTRFv5Res):
         self.concatenate_embeddings = Concatenate(name='concatenate_embedding')
         self.flatten_word_embedding = Flatten(name='flatten_word_embedding')
         self.flatten_role_embedding = Flatten(name='flatten_role_embedding')
-        self.embedding_projection = Dense(300, activation='relu', name='embedding_projection')
+        self.embedding_projection = Dense(300, activation='relu', name='projection_embedding')
         self.concatenate_target_role = Concatenate(name='concatenate_target_role')
         self.concatenate_target_word = Concatenate(name='concatenate_target_word')
 
@@ -650,9 +650,9 @@ class MTRFv9Res(MTRFv5Res):
 
         # If we need to get the embedding for use with the GS test,
         # then use the output from the projection.
-        # if get_embedding:
-        #     return Model(inputs=self.input_dict,
-        #                  outputs={'context_embedding': projection_embedding})
+        if get_embedding:
+            return Model(inputs=self.input_dict,
+                         outputs={'context_embedding': projection_embedding})
         # Concatenate with target role and word
         concatenated_target_role = self.concatenate_target_role([target_role_embedding_out, projection_embedding])
         concatenated_target_word = self.concatenate_target_word([target_word_embedding_out, projection_embedding])

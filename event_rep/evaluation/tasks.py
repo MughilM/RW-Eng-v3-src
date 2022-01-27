@@ -53,6 +53,7 @@ class EvaluationTask:
         # the checkpoints to load the weights. On the flip side, we have to make the
         # correct model structure, using the hyperparameters. This is why the model_name
         # is needed. The hyperparameters are saved in the experiment directory.
+        logger.info(f'Experiment name called in task: {self.experiment_name}')
         self.hp_set = HyperparameterSet(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'hyperparameters.json'))
         # Create the model layers using the hyperparameters
         if self.model_name == 'v9':
