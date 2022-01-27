@@ -573,11 +573,11 @@ class MTRFv9Res(MTRFv5Res):
         # find the embeddings and output layers, and bring the weights over...
         # ...and freeze them as well. The word embedding name varies based on the type of embedding
         for layer in self.orig_model.layers:
-            if layer.name == f'word_embedding_{self.hp_set.embedding_type}_{self.hp_set.oov}':
+            if layer.name == f'word_embedding_{self.hp_set.embedding_type}_{self.hp_set.oov}' or layer.name == f'word_embedding_spacy_{self.hp_set.oov}':
                 self.word_embedding = Embedding(input_dim=self.hp_set.word_vocab_count,
                                                 output_dim=self.hp_set.word_embedding_dimension,
-                                                embeddings_initializer=layer.weights[0],
-                                                name=layer.name,
+                                                embeddings_initializer=constant(layer.weights[0]),
+                                                name=f'word_embedding_{self.hp_set.embedding_type}_{self.hp_set.oov}',
                                                 trainable=not self.hp_set.freeze_word_embeddings)
             elif layer.name == 'role_embedding':
                 self.role_embedding = self.role_embedding = Embedding(input_dim=self.hp_set.role_vocab_count,
