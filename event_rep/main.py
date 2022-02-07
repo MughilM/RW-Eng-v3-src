@@ -278,7 +278,7 @@ if __name__ == '__main__':
                         help='If listed, then substitutes the average + noise for pretrained embedding vectors'
                              'where those words are not listed in our vocabulary. By default, substitutes them'
                              'with all 0 vectors.')
-    parser.add_argument('--word_role_aggregation', choices=['multiply', 'concat', 'null', 'full_null'], default='multiply',
+    parser.add_argument('--word_role_aggregation', choices=['multiply', 'concat', 'input_null', 'target_null', 'full_null'], default='multiply',
                         help='The aggregation method to combine the roles with the words. "multiply" will be applied'
                              'if the role and word have the same embedding dimension. Otherwise, they will '
                              'concatenated. The "null" option means to REMOVE the INPUT roles from '
@@ -314,7 +314,7 @@ if __name__ == '__main__':
                        'are different. Aggregation method will change to "concat".')
         args.word_role_aggregation = 'concat'
     # If we set the aggregation to full_null, then set to freeze the role embeddings
-    if args.word_role_aggregation == 'full_null':
+    if args.word_role_aggregation == 'full_null' or args.word_role_aggregation == 'input_null':
         args.freeze_role_embeddings = True
     # Small checks for contradictions.
     if args.eval_only:

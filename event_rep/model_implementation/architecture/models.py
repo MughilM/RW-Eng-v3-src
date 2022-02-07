@@ -400,7 +400,7 @@ class MTRFv6Res(MTRFv5Res):
         # all ones. Therefore, no information is being passed through the Multiply
         # in the weighted context before the word prediction.
         # freeze_role_embeddings parameter is set to True in main if "full_null" was chosen.
-        elif self.hp_set.word_role_aggregation == 'full_null':
+        elif self.hp_set.word_role_aggregation == 'full_null' or self.hp_set.word_role_aggregation == 'input_null':
             self.role_embedding = Embedding(input_dim=self.hp_set.role_vocab_count,
                                             output_dim=self.hp_set.role_embedding_dimension,
                                             embeddings_initializer=constant(
@@ -408,6 +408,16 @@ class MTRFv6Res(MTRFv5Res):
                                                                self.hp_set.role_embedding_dimension))),
                                             name='role_embedding',
                                             trainable=not self.hp_set.freeze_role_embeddings)
+        # If it's target_null, then freeze the target role embedding with the identity matrix,
+        # because we still want to train the input embedding
+        else:
+            self.target_role_embedding = Embedding(input_dim=self.hp_set.role_vocab_count,
+                                                   output_dim=self.hp_set.role_embedding_dimension,
+                                                   embeddings_initializer=constant(
+                                                       np.ones(shape=(self.hp_set.role_vocab_count,
+                                                                      self.hp_set.role_embedding_dimension))),
+                                                   name='target_role_embedding',
+                                                   trainable=False)
 
     def build_model(self, training=True, get_embedding=False):
         # Pass inputs through embedding...
@@ -428,7 +438,7 @@ class MTRFv6Res(MTRFv5Res):
         # 2) The residual connection is on the first dense layer (lin_proj1)
         #    instead of the aggregation layer (multiply/concatenation). This
         #    introduces the fewest weights in case the role embedding is large.
-        if self.hp_set.word_role_aggregation in ['null', 'full_null']:
+        if self.hp_set.word_role_aggregation in ['input_null', 'full_null']:
             total_embeddings = word_embedding_out
         # Otherwise, combine according to the aggregation layer saved
         else:
@@ -443,15 +453,19 @@ class MTRFv6Res(MTRFv5Res):
         if get_embedding:
             return Model(inputs=self.input_dict,
                          outputs={'context_embedding': context_embedding})
-        # Create target role and word embeddings multiplied with the context.
-        # Note the crossing of inputs into the other's hidden layer.
-        # We are taking from V5, so get the target values from the input embeddings.
-        # Regardless if the aggregation is null, the target embedding should
-        # still take from here...
-        twh_out = self.target_word_hidden([
-            self.weight_context_word(context_embedding),
-            self.target_role_flatten(self.target_role_drop(self.role_embedding(self.target_role)))
-        ])
+        # For creation of the target embeddings multiplied with context,
+        # we use the role_embedding if it's full_null or input_null.
+        # If it's target_null, then we need to multiply with the target_role_embedding
+        if self.hp_set.word_role_aggregation in ['input_null', 'full_null']:
+            twh_out = self.target_word_hidden([
+                self.weight_context_word(context_embedding),
+                self.target_role_flatten(self.target_role_drop(self.role_embedding(self.target_role)))
+            ])
+        if self.hp_set.word_role_aggregation == 'target_null':
+            twh_out = self.target_word_hidden([
+                self.weight_context_word(context_embedding),
+                self.target_role_flatten(self.target_role_drop(self.target_role_embedding(self.target_role)))
+            ])
         trh_out = self.target_role_hidden([
             self.weight_context_role(context_embedding),
             self.target_word_flatten(self.target_word_drop(self.word_embedding(self.target_word)))
