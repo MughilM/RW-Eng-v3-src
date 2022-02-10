@@ -409,7 +409,8 @@ class MTRFv6Res(MTRFv5Res):
                                             name='role_embedding',
                                             trainable=not self.hp_set.freeze_role_embeddings)
         # If it's target_null, then freeze the target role embedding with the identity matrix,
-        # because we still want to train the input embedding
+        # because we still want to train the input embedding. Also, set the word role aggregation
+        # layer to be multiply, since that's the default.
         else:
             self.target_role_embedding = Embedding(input_dim=self.hp_set.role_vocab_count,
                                                    output_dim=self.hp_set.role_embedding_dimension,
@@ -418,6 +419,7 @@ class MTRFv6Res(MTRFv5Res):
                                                                       self.hp_set.role_embedding_dimension))),
                                                    name='target_role_embedding',
                                                    trainable=False)
+            self.wr_agg_layer = Multiply()
 
     def build_model(self, training=True, get_embedding=False):
         # Pass inputs through embedding...
