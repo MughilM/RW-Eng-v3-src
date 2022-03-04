@@ -102,6 +102,8 @@ if __name__ == '__main__':
     logger.info(f'Checkpoint Files - {check_files}')
     # EXtract the checkpoint numbers from them
     checkpoint_nums = [int(re.search(r'(\d+)', os.path.basename(check))[0]) for check in check_files]
+    # Sort them, so that the resulting csv is easy to read (won't affect actual evaluation)
+    checkpoint_nums = sorted(checkpoint_nums)
     logger.info(f'Checkpoint Numbers - {checkpoint_nums}')
 
     # Get the dataset as well
