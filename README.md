@@ -5,7 +5,7 @@ This repository holds extended research of a thematic fit model that has been tr
 ## Data and License
 The corpus itself is available at: http://yuvalmarton.com/rw-eng/
 
-The corpus contains documents coming from the British National Corpus (BNC) and ukWaC. Therefore, the license for using it is the same license as the ukWac (CC BY-NC-SA 4.0: summary, which is not instead of the license: attribute our work, share, adapt, whatever, just not for commercial use, and don’t sue us for anything). The BNC no longer requires a license.
+The corpus contains documents coming from the British National Corpus (BNC) and ukWaC. Therefore, the license for using it is the same license as the ukWac ([CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode): summary, which is not instead of the license: attribute our work, share, adapt, whatever, just not for commercial use, and don’t sue us for anything). The BNC no longer requires a license.
 
 If you use this corpus or the code in this repository, please cite us (See details below).
 
