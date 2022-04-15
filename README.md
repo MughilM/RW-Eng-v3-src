@@ -2,6 +2,28 @@
 
 This repository holds extended research of a thematic fit model that has been trained using a multi-task residual role-filler approach. 
 
+## Data and License
+The corpus itself is available at: http://yuvalmarton.com/rw-eng/
+
+The corpus contains documents coming from the British National Corpus (BNC) and ukWaC. Therefore, the license for using it is the same license as the ukWac (CC BY-NC-SA 4.0: summary, which is not instead of the license: attribute our work, share, adapt, whatever, just not for commercial use, and don’t sue us for anything). The BNC no longer requires a license.
+
+If you use this corpus or the code in this repository, please cite us (See details below).
+
+## Please cite:
+Yuval Marton, Asad Sayeed (2021). *Thematic fit bits: Annotation quality and quantity for event participant representation.* http://arxiv.org/abs/2105.06097
+
+BibTex:
+```
+@misc{marton-sayeed-2021-RW-eng-v2,
+      title={Thematic fit bits: Annotation quality and quantity for event participant representation},
+      author={Yuval Marton and Asad Sayeed},
+      year={2021},
+      eprint={2105.06097},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+```
+
 ## Key Dependencies
 
 - **Tested OS:** Ubuntu 18.04, Windows
