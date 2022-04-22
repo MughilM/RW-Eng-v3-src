@@ -154,6 +154,12 @@ if __name__ == '__main__':
                 # Add the full, low, and high
                 results.extend([evaluator.metrics['rho'], evaluator.metrics['low_rho'], evaluator.metrics['high_rho']])
             else:
+                if task == 'pado':
+                    evaluator.dataset.to_csv(os.path.join(EXPERIMENT_DIR,
+                                                          args.experiment_name, f'pado_{check_num}.csv'))
+                if task == 'mcrae':
+                    evaluator.dataset.to_csv(os.path.join(EXPERIMENT_DIR,
+                                                          args.experiment_name, f'mcrae_{check_num}.csv'))
                 logger.info(f'{task.upper()} (epoch {check_num}) - {evaluator.metrics["rho"] * 100:.3f}%')
                 results.append(evaluator.metrics['rho'])
         data.append(results)
@@ -163,4 +169,3 @@ if __name__ == '__main__':
     evaluation_df.set_index(['Checkpoint Epoch'], inplace=True)
     # Save as csv in the experiment directory
     evaluation_df.to_csv(os.path.join(EXPERIMENT_DIR, args.experiment_name, 'all_eval_results.csv'))
-
