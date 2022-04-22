@@ -138,7 +138,7 @@ def train_test_eval(model_name,
             model.load_weights(latest_checkpoint)
             with open(os.path.join(model_artifact_dir, 'metrics.json'), 'r') as f:
                 past_metrics = json.load(f)
-            initial_epoch = past_metrics['total_epochs'] + 1
+            initial_epoch = past_metrics['total_epochs']
         # If the path exists, but we are not loading the previous,
         # then delete whatever is there...
         else:
