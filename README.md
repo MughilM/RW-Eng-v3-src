@@ -51,6 +51,7 @@ Make sure to select the correct environment file pertaining to your OS. This wil
 Everything is run from `main.py`. We have included a small dataset of 1000 samples in `processed_data` called `v2` (The second argument is the `--data_version`). The `processed_data` folder is currently set as the data directory, which means **any dataset you wish to use needs to be moved to this folder**. Simply choose the model and dataset name, along with other optional parameters such as experiment name, epochs, etc. Experiments are saved to the `experiments` subfolder.
 
 ```bash
+cd event_rep
 python main.py \
   v4 \
   v2 \
@@ -68,6 +69,7 @@ This will train the MTRFv4Res model with 15 epochs and save under `test_exp`. It
 If evaluating on an already trained model is desired, then simply provide the experiment name and the `--eval_only` flag:
 
 ```bash
+cd event_rep
 python main.py \
   v4 \
   v2 \
