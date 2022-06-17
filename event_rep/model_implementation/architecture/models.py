@@ -19,8 +19,8 @@ from model_implementation.architecture.hp.hyperparameters import HyperparameterS
 
 # Embedding Packages
 import spacy
-import fasttext
-import fasttext.util
+#import fasttext
+#import fasttext.util
 from nltk.stem import WordNetLemmatizer
 from gensim.models import KeyedVectors
 
@@ -226,6 +226,9 @@ class MTRFv4Res(BaseModel):
         elif self.hp_set.embedding_type == 'fasttext':
             # Download fasttext embedding to the directory,
             # We can't control download location with utils.download_model
+            import fasttext
+            import fasttext.util
+
             fasttext_emb_path = os.path.join(self.PRETRAINED_DIR, 'cc.en.300.bin.gz')
             if not os.path.exists(fasttext_emb_path):
                 self.logger.info(f'Fasttext embeddings not present. '
