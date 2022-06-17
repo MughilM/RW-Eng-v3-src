@@ -41,10 +41,24 @@ Once NVIDIA, CUDA, and cuDNN libraries are installed and verified with `nvidia-s
 git clone https://github.com/MughilM/RW-Eng-v3-src.git
 cd RW-Eng-v3-src
 conda env create -f environments/capstoneenv_linux.yml
-conda activate bloomberg-cu-capstone-2020
+conda activate rweng2-wheres-the-learning
 ```
 
-Make sure to select the correct environment file pertaining to your OS. This will create the `bloomberg` environment.
+Make sure to select the correct environment file pertaining to your OS. This will create the `rweng2-wheres-the-learning` environment.
+
+Once activated the conda env, you may need to add the following as well:
+```bash
+conda install -c conda-forge cudatoolkit=11.2 cudnn=8.1.0
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/
+# the following line may or may not be needed:
+python3 -m pip install tensorflow
+# Verify install:
+python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+# if getting error with libcusolver.so.10 , per the advice in https://github.com/tensorflow/tensorflow/issues/43947#issuecomment-715295153 , try adding something like:
+sudo ln -s YOUR_CONDA_ENV_PATH/lib/libcusolver.so.11  YOUR_CONDA_ENV_PATH/lib/libcusolver.so.10 
+# You may also need this:
+sudo apt install graphviz
+```
 
 ## Usage
 
