@@ -31,7 +31,7 @@ BibTex:
 - Tensorflow 2.4
 - CUDA 11/10.1
 
-Numerous problems were encountered using Python versions above 3.7 as well as Tensorflow 2.5. Instructions for setting up CUDA 11 and 10.1 on Ubuntu systems can be found [here](https://www.tensorflow.org/install/gpu#install_cuda_with_apt) and [here](http://web.archive.org/web/20201207152356/https://www.tensorflow.org/install/gpu) respectively.
+Numerous problems were encountered using Python versions above 3.7 as well as Tensorflow 2.5. Instructions for setting up CUDA 11 and 10.1 on Ubuntu systems can be found [here](https://www.tensorflow.org/install/gpu#install_cuda_with_apt) and [here](http://web.archive.org/web/20201207152356/https://www.tensorflow.org/install/gpu) respectively. For Windows systems, please refer to official installers for NVIDIA drivers and CUDA versions. cudNN "installation" comprises of moving files to the CUDA installation directory and can be found from the [NVIDIA Developer page](https://developer.nvidia.com/rdp/cudnn-archive) (account required). Once again, please take care of compatible versions. **Install CUDA versions above 11.2 at your own risk, as Tensorflow has not been tested for those versions.**
 
 ## Setting Up
 
@@ -44,7 +44,7 @@ conda env create -f environments/capstoneenv_linux.yml
 conda activate rweng2-wheres-the-learning
 ```
 
-Make sure to select the correct environment file pertaining to your OS. This will create the `rweng2-wheres-the-learning` environment.
+Make sure to select the correct environment file pertaining to your OS. This will create the `rweng2-wheres-the-learning` environment. The quickest way to test GPU visibility is to run `python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"`. If all is working corrcetly, you should see a single entry with your GPU listed.
 
 Once activated the conda env, you may need to add the following as well:
 ```bash
