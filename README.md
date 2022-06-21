@@ -31,7 +31,7 @@ BibTex:
 - Tensorflow 2.4
 - CUDA 11/10.1
 
-Numerous problems were encountered using Python versions above 3.7 as well as Tensorflow 2.5. Instructions for setting up CUDA 11 and 10.1 on Ubuntu systems can be found [here](https://www.tensorflow.org/install/gpu#install_cuda_with_apt) and [here](http://web.archive.org/web/20201207152356/https://www.tensorflow.org/install/gpu) respectively.
+Numerous problems were encountered using Python versions above 3.7 as well as Tensorflow 2.5. Instructions for setting up CUDA 11 and 10.1 on Ubuntu systems can be found [here](https://www.tensorflow.org/install/gpu#install_cuda_with_apt) and [here](http://web.archive.org/web/20201207152356/https://www.tensorflow.org/install/gpu) respectively. For Windows systems, please refer to official installers for NVIDIA drivers and CUDA versions. cudNN "installation" comprises of moving files to the CUDA installation directory and can be found from the [NVIDIA Developer page](https://developer.nvidia.com/rdp/cudnn-archive) (account required). Once again, please take care of compatible versions. **Install CUDA versions above 11.2 at your own risk, as Tensorflow has not been tested for those versions.**
 
 ## Setting Up
 
@@ -41,10 +41,24 @@ Once NVIDIA, CUDA, and cuDNN libraries are installed and verified with `nvidia-s
 git clone https://github.com/MughilM/RW-Eng-v3-src.git
 cd RW-Eng-v3-src
 conda env create -f environments/capstoneenv_linux.yml
-conda activate bloomberg-cu-capstone-2020
+conda activate rweng2-wheres-the-learning
 ```
 
-Make sure to select the correct environment file pertaining to your OS. This will create the `bloomberg` environment.
+Make sure to select the correct environment file pertaining to your OS. This will create the `rweng2-wheres-the-learning` environment. The quickest way to test GPU visibility is to run `python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"`. If all is working corrcetly, you should see a single entry with your GPU listed.
+
+Once activated the conda env, you may need to add the following as well:
+```bash
+conda install -c conda-forge cudatoolkit=11.2 cudnn=8.1.0
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/
+# the following line may or may not be needed:
+python3 -m pip install tensorflow
+# Verify install:
+python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+# if getting error with libcusolver.so.10 , per the advice in https://github.com/tensorflow/tensorflow/issues/43947#issuecomment-715295153 , try adding something like:
+sudo ln -s YOUR_CONDA_ENV_PATH/lib/libcusolver.so.11  YOUR_CONDA_ENV_PATH/lib/libcusolver.so.10 
+# You may also need this:
+sudo apt install graphviz
+```
 
 ## Usage
 
