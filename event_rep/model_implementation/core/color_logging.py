@@ -78,15 +78,4 @@ class ColorHandler(logging.StreamHandler):
         }
 
         color = msg_colors.get(record.levelno, "blue")
-        self.stream.write(record.msg + "\n", color)
-
-
-logging.getLogger().setLevel(logging.DEBUG)
-logging.getLogger().addHandler(ColorHandler())
-
-
-if __name__ == "__main__":
-    logging.debug("Some debugging output")
-    logging.info("Some info output")
-    logging.error("Some error output")
-    logging.warning("Some warning output")
+        self.stream.write(self.format(record) + "\n", color)

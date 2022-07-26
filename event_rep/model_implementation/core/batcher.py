@@ -41,14 +41,8 @@ class WordRoleWriter:
         self.chunk_size = chunk_size
         self.overwrite = overwrite
 
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger('event_rep.model_implementation.core.batcher')
         self.logger.setLevel(logging.DEBUG)
-
-        handler = logging.StreamHandler(sys.stdout)
-        # create a logging format
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
 
         # Make the directories in the output path for train, dev, and test
         for directory in [train_dir, val_dir, test_dir]:

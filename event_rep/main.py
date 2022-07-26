@@ -30,15 +30,17 @@ from model_implementation.core.batcher import WordRoleWriter
 from model_implementation.core.roles import *
 from model_implementation.core.callbacks import MetricCallback
 from evaluation.tasks import CorrelateTFScores, BicknellTask, GS2013Task
+from model_implementation.core.color_logging import ColorHandler
 
-logger = logging.getLogger('main')
+logger = logging.getLogger('event_rep')
 logger.setLevel(logging.DEBUG)
 
-handler = logging.StreamHandler(sys.stdout)
 # create a logging format
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+# Add the color handler
+console = ColorHandler()
+console.setFormatter(formatter)
+logger.addHandler(console)
 
 # Directory locations
 # The absolute path where main is being run. Should end in RW-Eng-v3-src/event_rep

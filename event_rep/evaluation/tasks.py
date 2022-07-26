@@ -21,15 +21,8 @@ import logging
 
 from nltk.stem import WordNetLemmatizer
 
-logger = logging.getLogger('task')
+logger = logging.getLogger('event_rep.evaluation.tasks')
 logger.setLevel(logging.DEBUG)
-
-handler = logging.StreamHandler(sys.stdout)
-# create a logging format
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-
 
 
 class EvaluationTask:

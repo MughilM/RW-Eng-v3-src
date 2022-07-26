@@ -14,7 +14,8 @@ import os
 import pickle
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('event_rep.architecture.hp.hyperparameters')
+logger.setLevel(logging.DEBUG)
 
 
 class HyperparameterSet:

@@ -42,7 +42,7 @@ class MTRFv4Res(BaseModel):
         super().__init__()
         self.hp_set = hp_set
         self.PRETRAINED_DIR = pretrained_emb_dir
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger('event_rep.architecture.models')
         # Input layers, ONLY USED IN build().
         self.input_words = Input(shape=(self.hp_set.role_vocab_count - 1), dtype=tf.uint32, name='input_words')
         self.input_roles = Input(shape=(self.hp_set.role_vocab_count - 1), dtype=tf.uint32, name='input_roles')
