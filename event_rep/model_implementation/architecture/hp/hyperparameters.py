@@ -81,7 +81,6 @@ class HyperparameterSet:
             update_object_params_dict(self, des)
         # As of this moment, the unknown word and role are NOT included
         # in the vocabulary dictionary, so we must add them separately.
-        # TODO: Ideally, these should be included in the vocabulary dictionaries in description itself.
         if self.missing_word_id != self.unk_word_id:
             self.word_vocabulary['<NULL>'] = self.missing_word_id
         self.word_vocabulary['<UNKNOWN>'] = self.unk_word_id

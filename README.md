@@ -1,6 +1,6 @@
-# RW-Eng-v3
+# RW-Eng-v3 (arXiv Release)
 
-This repository holds extended research of a thematic fit model that has been trained using a multi-task residual role-filler approach. 
+This branch holds our research that was released as part of the arXiv paper.
 
 ## Data and License
 The corpus itself is available at: http://yuvalmarton.com/rw-eng/

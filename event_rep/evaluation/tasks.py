@@ -69,7 +69,7 @@ class EvaluationTask:
         self.model.load_weights(latest_checkpoint).expect_partial()
         logger.info(f'Loaded model and hyperparameters from {os.path.join(self.EXPERIMENT_DIR, self.experiment_name)}')
         # This should be used to save any metrics, that can later be written in
-        # the generate report method.
+        # the generate_report method.
         self.metrics = {}
 
     def _preprocess(self) -> Dict[str, np.ndarray]:
@@ -349,7 +349,7 @@ class BicknellTask(EvaluationTask):
                              f"{'=' * len(max(self.metrics[f'unknown_{col}s'], key=lambda x: len(x)))}\n"
                 uk_report += '\n'.join(self.metrics[f'unknown_{col}s']) + '\n\n'
 
-        # Final metrics reprot at the end
+        # Final metrics report at the end
         fin_report = make_box('FINAL ACCURACY METRICS', 6) + '\n'
         # Report accuracy as correct / total and as percentage
         fin_report += f"ENTIRE DATASET ({self.dataset.shape[0]}): {self.metrics['num_correct']} / " \
@@ -420,7 +420,7 @@ class GS2013Task(EvaluationTask):
         landmark_verb_words[:, verb_id] = self.gs_ids['landmark_verb'].values
 
         # The target word and role can be whatever, since we are not predicting
-        # anything, jsut looking at the embeddings...
+        # anything, just looking at the embeddings...
         target_role = np.full(shape=(self.gs.shape[0], 1), fill_value=0, dtype=int)
         target_word = np.full(shape=(self.gs.shape[0], 1), fill_value=1729, dtype=int)
 
@@ -484,7 +484,7 @@ class GS2013Task(EvaluationTask):
         self.metrics['high_rho_m'] = rho
         self.metrics['high_p_m'] = p
 
-        # We correlate the scores with the similariites
+        # We correlate the scores with the similarities
         rho, p = spearmanr(self.gs['score'], self.gs['cosine'])
         self.metrics['rho'] = rho
         self.metrics['p'] = p

@@ -16,14 +16,12 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import *
 from tensorflow.keras.initializers import glorot_uniform, constant
 from tensorflow.keras.optimizers import Adam
-import tensorflow.keras.backend as K
 from model_implementation.architecture.hp.hyperparameters import HyperparameterSet
 
 # Embedding Packages
 import spacy
 import fasttext
 import fasttext.util
-from nltk.stem import WordNetLemmatizer
 from gensim.models import KeyedVectors
 
 import os
@@ -31,7 +29,6 @@ import requests
 import logging
 import gzip
 import shutil
-import gdown
 
 
 class BaseModel:
@@ -129,19 +126,8 @@ class MTRFv4Res(BaseModel):
                                                 activation='softmax', use_bias=False)
         self.target_role_output_no_bias = Dense(self.hp_set.role_vocab_count, name='r_out',
                                                 activation='softmax', use_bias=False)
-        # self.target_word_output_raw = Dense(self.hp_set.word_vocab_count, name='word_output_raw')
-        # self.target_role_output_raw = Dense(self.hp_set.role_vocab_count, name='role_output_raw')
-        # self.target_word_act = Activation('softmax', name='w_out')
-        # self.target_role_act = Activation('softmax', name='r_out')
 
     def build_model(self, training=True, get_embedding=False):
-        # WE ASSUME THAT THE INPUTS ARE PASSED IN AS DICTIONARIES WITH THE KEYS:
-        # [input_words, input_roles, target_word, target_role]
-        # Though of course, when the Model is defined and data is fed through, it is much easier
-        # to simply provide a tf.dataset where the input layer names map properly...
-        # input_words, input_roles, target_word, target_role = inputs[0], inputs[1], inputs[2], inputs[3]
-        # input_words, input_roles, target_word, target_role = inputs['input_words'], inputs['input_roles'], \
-        #                                                      inputs['target_word'], inputs['target_role']
         # Pass inputs through embedding...
         word_embedding_out = self.word_embedding(self.input_words)
         role_embedding_out = self.role_embedding(self.input_roles)
@@ -150,7 +136,7 @@ class MTRFv4Res(BaseModel):
             mask = self.embedding_mask(self.input_words)
             # Update the embeddings
             word_embedding_out = self.word_embed_multi([word_embedding_out, mask])
-        # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...
+        # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...)
         # ...but our default is nonzero...
         word_embedding_out = self.word_dropout(word_embedding_out)
         role_embedding_out = self.role_dropout(role_embedding_out)
@@ -184,7 +170,6 @@ class MTRFv4Res(BaseModel):
             tw_out = self.target_word_output(twh_out)
             tr_out = self.target_role_output(trh_out)
         # tw_out = self.target_word_act(tw_out_raw)
-        # tr_out = self.target_role_act(tr_out_raw)
         return Model(inputs=self.input_dict,
                      outputs={'w_out': tw_out, 'r_out': tr_out})
 
@@ -202,16 +187,14 @@ class MTRFv4Res(BaseModel):
                              output_dim=self.hp_set.word_embedding_dimension,
                              embeddings_initializer=glorot_uniform(), name='word_embedding_random',
                              trainable=not self.hp_set.freeze_word_embeddings)
-        # Otherwise we are looking at one of 3 embeddings, and one of 2 initialaizers
-        # for OOV...
-        # embedding_source, oov_init = tuple(self.hp_set.embedding_type.split('_'))
+        # Otherwise we are looking at one of 3 embeddings, and one of 2 initialaizers for OOV...
         layer_name = f'word_embedding_{self.hp_set.embedding_type}_{self.hp_set.oov}'
         # We essentially want to merge a blank embedding matrix with whatever
         # words we have in teh pretrained embedding model, and either leave the missing
         # word alone or impute them with the average embedding (plus some noise)
         full_embedding_matrix = np.zeros(shape=(self.hp_set.word_vocab_count, self.hp_set.word_embedding_dimension))
         # Because we plan to match our word IDs with the indices of our pretrained embedding matrices,
-        # it will helpful if we separate the words and the IDs and sort them.
+        # it will be helpful if we separate the words and the IDs and sort them.
         words = np.array(list(self.hp_set.word_vocabulary.keys()))
         IDs = np.array(list(self.hp_set.word_vocabulary.values()))
         words = words[np.argsort(IDs)]
@@ -226,7 +209,7 @@ class MTRFv4Res(BaseModel):
             # the function returns -1 for that word. Adjust accordingly...
             spacy_IDs = nlp.vocab.vectors.find(keys=words)
             full_embedding_matrix = spacy_matrix[spacy_IDs]
-            # Whereever the spaCy ID is -1, set it to 0...
+            # Wherever the spaCy ID is -1, set it to 0...
             full_embedding_matrix[spacy_IDs == -1] = 0
         elif self.hp_set.embedding_type == 'fasttext':
             # Download fasttext embedding to the directory,
@@ -288,7 +271,6 @@ class MTRFv4Res(BaseModel):
             # Assign to matrix
             full_embedding_matrix[oov_rows] = imputed_mean
             # Now add some noise...
-            # TODO: Hardcoded limit bounds here (-0.05, 0.05), maybe make as a hyperparameter?
             noise = np.random.random((len(oov_rows), self.hp_set.word_embedding_dimension)) * 0.1 - 0.05
             full_embedding_matrix[oov_rows] += noise
 
@@ -326,8 +308,6 @@ class MTRFv5Res(MTRFv4Res):
                                          name='weighted_context_role')
 
     def build_model(self, training=True, get_embedding=False):
-        # input_words, input_roles, target_word, target_role = inputs['input_words'], inputs['input_roles'], \
-        #                                                      inputs['target_word'], inputs['target_role']
         # Pass inputs through embedding...
         word_embedding_out = self.word_embedding(self.input_words)
         role_embedding_out = self.role_embedding(self.input_roles)
@@ -371,8 +351,6 @@ class MTRFv5Res(MTRFv4Res):
         else:
             tw_out = self.target_word_output(twh_out)
             tr_out = self.target_role_output(trh_out)
-        # tw_out = self.target_word_act(tw_out_raw)
-        # tr_out = self.target_role_act(tr_out_raw)
         return Model(inputs=self.input_dict,
                      outputs={'w_out': tw_out, 'r_out': tr_out})
 
@@ -417,7 +395,7 @@ class MTRFv6Res(MTRFv5Res):
                                             trainable=not self.hp_set.freeze_role_embeddings)
         # If it's target_null, then freeze the target role embedding with the identity matrix,
         # because we still want to train the input embedding. Also, set the word role aggregation
-        # layer to be multiply, since that's the default.
+        # layer to be Multiply, since that's the default.
         else:
             self.target_role_embedding = Embedding(input_dim=self.hp_set.role_vocab_count,
                                                    output_dim=self.hp_set.role_embedding_dimension,
@@ -437,7 +415,7 @@ class MTRFv6Res(MTRFv5Res):
             mask = self.embedding_mask(self.input_words)
             # Update the embeddings
             word_embedding_out = self.word_embed_multi([word_embedding_out, mask])
-        # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...
+        # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...)
         # ...but our default is nonzero...
         word_embedding_out = self.word_dropout(word_embedding_out)
         role_embedding_out = self.role_dropout(role_embedding_out)
@@ -487,8 +465,6 @@ class MTRFv6Res(MTRFv5Res):
         else:
             tw_out = self.target_word_output(twh_out)
             tr_out = self.target_role_output(trh_out)
-        # tw_out = self.target_word_act(tw_out_raw)
-        # tr_out = self.target_role_act(tr_out_raw)
         return Model(inputs=self.input_dict,
                      outputs={'w_out': tw_out, 'r_out': tr_out})
 
@@ -515,7 +491,7 @@ class MTRFv8Res(MTRFv6Res):
             mask = self.embedding_mask(self.input_words)
             # Update the embeddings
             word_embedding_out = self.word_embed_multi([word_embedding_out, mask])
-        # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...
+        # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...)
         # ...but our default is nonzero...
         word_embedding_out = self.word_dropout(word_embedding_out)
         role_embedding_out = self.role_dropout(role_embedding_out)
@@ -563,8 +539,6 @@ class MTRFv8Res(MTRFv6Res):
         else:
             tw_out = self.target_word_output(twh_out)
             tr_out = self.target_role_output(trh_out)
-        # tw_out = self.target_word_act(tw_out_raw)
-        # tr_out = self.target_role_act(tr_out_raw)
         return Model(inputs=self.input_dict,
                      outputs={'w_out': tw_out, 'r_out': tr_out})
 
@@ -587,7 +561,7 @@ class MTRFv9Res(MTRFv5Res):
         checkpoint_dir = os.path.join(self.experiment_name_dir, 'checkpoints')
         print(f'Checkpoint directory: {checkpoint_dir}')
         latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
-        print(f'Latest checkponit: {latest_checkpoint}')
+        print(f'Latest checkpoint: {latest_checkpoint}')
         # We won't use all the weights (bias or half the model will be missing),
         # so do expect_partial() to remove the warnings...
         self.orig_model.load_weights(latest_checkpoint).expect_partial()
@@ -608,30 +582,6 @@ class MTRFv9Res(MTRFv5Res):
                                                                       embeddings_initializer=constant(layer.weights[0]),
                                                                       name='role_embedding',
                                                                       trainable=not self.hp_set.freeze_role_embeddings)
-            # For outputs, just like we have two separate layers for with and without bias,
-            # we need it here. The weight initialization is slightly different...
-            # elif layer.name == 'w_out':
-            #     # print(layer.weights)
-            #     # print(layer.bias)
-            #     self.target_word_output = Dense(self.hp_set.word_vocab_count, name='w_out', activation='softmax',
-            #                                     weights=layer.get_weights(), trainable=False)
-            #     # self.target_word_output.set_weights(layer.get_weights())
-            #     # No bias
-            #     self.target_word_output_no_bias = Dense(self.hp_set.word_vocab_count, name='w_out',
-            #                                             activation='softmax', use_bias=False,
-            #                                             weights=[layer.get_weights()[0]], trainable=False)
-            #     # self.target_word_output_no_bias.set_weights([layer.get_weights()[0]])
-            # elif layer.name == 'r_out':
-            #     # print(layer.weights)
-            #     # print(layer.bias)
-            #     self.target_role_output = Dense(self.hp_set.role_vocab_count, name='r_out', activation='softmax',
-            #                                     weights=layer.get_weights(), trainable=False)
-            #     # self.target_role_output.set_weights(layer.get_weights())
-            #     # No bias
-            #     self.target_role_output_no_bias = Dense(self.hp_set.role_vocab_count, name='r_out',
-            #                                             activation='softmax', use_bias=False,
-            #                                             weights=[layer.get_weights()[0]], trainable=False)
-                # self.target_role_output_no_bias.set_weights([layer.get_weights()[0]])
         # The "extra layers", one to flatten to multiply, and a single Dense layer after that...
         self.concatenate_embeddings = Concatenate(name='concatenate_embedding')
         self.flatten_word_embedding = Flatten(name='flatten_word_embedding')
@@ -648,10 +598,6 @@ class MTRFv9Res(MTRFv5Res):
             mask = self.embedding_mask(self.input_words)
             # Update the embeddings
             word_embedding_out = self.word_embed_multi([word_embedding_out, mask])
-        # Apply dropout (obviously if dropout_rate = 0, then this layer does nothing...
-        # ...but our default is nonzero...
-        # word_embedding_out = self.word_dropout(word_embedding_out)
-        # role_embedding_out = self.role_dropout(role_embedding_out)
         # Create outputs for the target role and word as well
         # We won't pass them through dropout and stuff
         target_word_embedding_out = self.word_embedding(self.target_word)
@@ -667,7 +613,7 @@ class MTRFv9Res(MTRFv5Res):
         ##### NOW THEN
         # Once we have multiplied the two embeddings, we now flatten it,
         # pass it through our Dense projection layer, and connect directly
-        # to the multiply's at the end (the ones with the target embeddings).
+        # to the Multiply's at the end (the ones with the target embeddings).
         # flattened_embedding = self.flatten_embeddings(total_embeddings)
         projection_embedding = self.embedding_projection(total_embeddings)
 
@@ -687,7 +633,5 @@ class MTRFv9Res(MTRFv5Res):
         else:
             tw_out = self.target_word_output(concatenated_target_role)
             tr_out = self.target_role_output(concatenated_target_word)
-        # tw_out = self.target_word_act(tw_out_raw)
-        # tr_out = self.target_role_act(tr_out_raw)
         return Model(inputs=self.input_dict,
                      outputs={'w_out': tw_out, 'r_out': tr_out})

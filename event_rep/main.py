@@ -58,7 +58,6 @@ DATA_PATH = os.path.join(SRC_DIR, 'processed_data')
 hp_set = HyperparameterSet(os.path.join(SRC_DIR, 'model_implementation/architecture/hp/default_params_all.json'))
 # This is a dictionary which maps the user-provided parameter of the model to
 # the corresponding class
-# TODO: Add models here as necessary, as the argument enforcement is on the keys
 PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
     'v4': MTRFv4Res,
     'v5': MTRFv5Res,
@@ -214,7 +213,6 @@ def run_thematic_evaluation(tasks: list, model, experiment):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a thematic fit model')
-    # Create the hyperparameter set, which sets all of our default parameters.
 
     # Required parameters
     parser.add_argument('model_name', choices=PARAM_TO_MODEL.keys(), type=str,
@@ -306,8 +304,6 @@ if __name__ == '__main__':
     parser.add_argument('--evaluation_tasks', choices=ALL_EVAL_TASKS + ['all'],
                         nargs='*', default=['all'],
                         help='The specific evaluation tasks to run. Must specify at least one.')
-    # eval_task_group.add_argument('--run_all_tasks', action='store_true', default=False,
-    #                              help='If specified, runs ALL thematic fit evaluation tasks.')
 
     args = parser.parse_args()
     # Check the choices for word_role_aggregation...
