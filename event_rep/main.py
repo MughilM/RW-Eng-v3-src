@@ -203,12 +203,12 @@ def run_thematic_evaluation(tasks: list, model, experiment):
     for task in tasks:
         logger.info(f'Running {task}...')
         if task == 'bicknell':
-            evaluator = BicknellTask(SRC_DIR, EXPERIMENT_DIR, model, experiment)
+            evaluator = BicknellTask(SRC_DIR, EXPERIMENT_DIR, model, experiment, PRETRAINED_DIR)
         elif task == 'gs':
             # Load the context embedding for the GS2013 task!!
-            evaluator = GS2013Task(SRC_DIR, EXPERIMENT_DIR, model, experiment, get_embedding=True)
+            evaluator = GS2013Task(SRC_DIR, EXPERIMENT_DIR, model, experiment, PRETRAINED_DIR, get_embedding=True)
         else:
-            evaluator = CorrelateTFScores(SRC_DIR, EXPERIMENT_DIR, model, experiment, task)
+            evaluator = CorrelateTFScores(SRC_DIR, EXPERIMENT_DIR, model, experiment, task, PRETRAINED_DIR)
         evaluator.run_task()
 
 

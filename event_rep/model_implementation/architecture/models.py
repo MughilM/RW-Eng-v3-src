@@ -8,6 +8,8 @@ original MTRFv4Res baseline model. Any extra models that are needed should
 be implemented here. Each model class should be paired with a hyperparameter class
 from hp/hyperparameters.py that define only the hyperparameters necessary.
 """
+import sys
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model
@@ -19,14 +21,17 @@ from model_implementation.architecture.hp.hyperparameters import HyperparameterS
 
 # Embedding Packages
 import spacy
-#import fasttext
-#import fasttext.util
+import fasttext
+import fasttext.util
 from nltk.stem import WordNetLemmatizer
 from gensim.models import KeyedVectors
 
 import os
 import requests
 import logging
+import gzip
+import shutil
+import gdown
 
 
 class BaseModel:
@@ -226,16 +231,17 @@ class MTRFv4Res(BaseModel):
         elif self.hp_set.embedding_type == 'fasttext':
             # Download fasttext embedding to the directory,
             # We can't control download location with utils.download_model
-            import fasttext
-            import fasttext.util
-
-            fasttext_emb_path = os.path.join(self.PRETRAINED_DIR, 'cc.en.300.bin.gz')
+            fasttext_emb_path = os.path.join(self.PRETRAINED_DIR, 'cc.en.300.bin')
             if not os.path.exists(fasttext_emb_path):
                 self.logger.info(f'Fasttext embeddings not present. '
-                                 f'Downloading file (~4.2 GB) to {fasttext_emb_path}...', end='')
+                                 f'Downloading file (~4.2 GB) to {fasttext_emb_path}.gz...')
                 fasttext_url = 'https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.en.300.bin.gz'
                 r = requests.get(fasttext_url, allow_redirects=True)
-                open(fasttext_emb_path, 'wb').write(r.content)
+                open(f'{fasttext_emb_path}.gz', 'wb').write(r.content)
+                self.logger.info('Unzipping file...')
+                with gzip.open(f'{fasttext_emb_path}.gz', 'rb') as f_in:
+                    with open(fasttext_emb_path, 'wb') as f_out:
+                        shutil.copyfileobj(f_in, f_out)
                 self.logger.info('Done!')
             self.logger.info(f'Reading Fasttext embeddings from {fasttext_emb_path}')
             fasttext_model = fasttext.load_model(fasttext_emb_path)
@@ -245,7 +251,7 @@ class MTRFv4Res(BaseModel):
             vect_get_id = np.vectorize(fasttext_model.get_word_id)
             # Apply it to our vocabulary. With fasttext, it does NOT return a 0 vector if the
             # word is absent, but get_word_id from fasttext can help with that.
-            full_embedding_matrix = vect_get_vector(words)
+            full_embedding_matrix = np.asarray([fasttext_model.get_word_vector(word) for word in words])
             fasttext_ids = vect_get_id(words)
             full_embedding_matrix[fasttext_ids == -1] = 0
             # We don't need the fasttext model anymore, delete it, it's taking up 4 GB of memory...
@@ -253,15 +259,13 @@ class MTRFv4Res(BaseModel):
         # Last is Word2Vec
         elif self.hp_set.embedding_type == 'w2v':
             w2v_emb_path = os.path.join(self.PRETRAINED_DIR, 'GoogleNews-vectors-negative300.bin.gz')
+            w2v_url = 'https://drive.google.com/uc?id=0B7XkCwpI5KDYNlNUTTlSS21pQmM'
             if not os.path.exists(w2v_emb_path):
-                self.logger.info(f'Word2Vec embeddings not present. Downloading file (~1.5 GB) to {w2v_emb_path}...',
-                                 end='')
-                w2v_url = 'https://s3.amazonaws.com/dl4j-distribution/GoogleNews-vectors-negative300.bin.gz'
-                r = requests.get(w2v_url, allow_redirects=True)
-                open(w2v_emb_path, 'wb').write(r.content)
-                self.logger.info('Done!')
+                self.logger.info(f'Word2Vec embeddings not present. Please download from {w2v_url} and place'
+                                 f' in event_rep/pretrained_embeddings. No need to extract.')
+                sys.exit(1)
             self.logger.info(f'Reading Word2Vec embeddings from {w2v_emb_path}')
-            w2v_model = KeyedVectors.load_word2vec_format(w2v_emb_path, binary=True)
+            w2v_model = KeyedVectors.load_word2vec_format(w2v_emb_path, binary=False)
             # A Gensim 4.0.0 special. Note that if Gensim 3.x is installed, the following will not work.
             # Due to the annoying KeyError, we have to change the function a tad...
             get_any_word = np.vectorize(lambda w: w2v_model.key_to_index[w] if w in w2v_model.key_to_index else -1)

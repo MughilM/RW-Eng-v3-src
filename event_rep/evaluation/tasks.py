@@ -26,7 +26,8 @@ logger.setLevel(logging.DEBUG)
 
 
 class EvaluationTask:
-    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False):
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, pretrained_embedding_dir,
+                 get_embedding=False):
         # This is needed so the correct model structure is used
         # when loading the model from the checkpoint.
         PARAM_TO_MODEL: Dict[str, Type[MTRFv4Res]] = {
@@ -38,6 +39,7 @@ class EvaluationTask:
         }
         self.SRC_DIR = SRC_DIR
         self.EXPERIMENT_DIR = EXPERIMENT_DIR
+        self.PRETRAINED_DIR = pretrained_embedding_dir
         self.model_name = model_name
         self.experiment_name = experiment_name
         self.lemmatizer = WordNetLemmatizer()
@@ -50,9 +52,10 @@ class EvaluationTask:
         self.hp_set = HyperparameterSet(os.path.join(self.EXPERIMENT_DIR, self.experiment_name, 'hyperparameters.json'))
         # Create the model layers using the hyperparameters
         if self.model_name == 'v9':
-            model_obj = MTRFv9Res(self.hp_set, os.path.join(self.EXPERIMENT_DIR, self.experiment_name)[:-3])
+            model_obj = MTRFv9Res(self.hp_set, os.path.join(self.EXPERIMENT_DIR, self.experiment_name)[:-3],
+                                  pretrained_emb_dir=self.PRETRAINED_DIR)
         else:
-            model_obj: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.hp_set)
+            model_obj: MTRFv4Res = PARAM_TO_MODEL[self.model_name](self.hp_set, pretrained_emb_dir=self.PRETRAINED_DIR)
         # Now, we build with training=False, and if we need the embeddings. At this point,
         # we don't have weights...
         self.model = model_obj.build_model(training=False, get_embedding=get_embedding)
@@ -120,8 +123,10 @@ class CorrelateTFScores(EvaluationTask):
     noun is supposed to fill, and a thematic fit judgement score. This data should be in
     csv format with columns as verb,noun,role,score.
     """
-    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, dataset_name: str, get_embedding=False):
-        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding)
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, dataset_name: str,
+                 pretrained_embedding_dir, get_embedding=False):
+        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name,
+                         pretrained_embedding_dir=pretrained_embedding_dir, get_embedding=get_embedding)
         self.dataset_name = dataset_name
         self.dataset_input_file = os.path.join(self.SRC_DIR, f'evaluation/task_data/{dataset_name}.csv')
         self.dataset = pd.read_csv(self.dataset_input_file)
@@ -237,8 +242,10 @@ class CorrelateTFScores(EvaluationTask):
 
 
 class BicknellTask(EvaluationTask):
-    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False):
-        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding)
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, pretrained_embedding_dir,
+                 get_embedding=False):
+        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name,
+                         pretrained_embedding_dir=pretrained_embedding_dir, get_embedding=get_embedding)
         self.dataset_name = 'bicknell'
         self.dataset_input_file = os.path.join(SRC_DIR, f'evaluation/task_data/{self.dataset_name}.csv')
         self.dataset = pd.read_csv(self.dataset_input_file)
@@ -360,8 +367,10 @@ class BicknellTask(EvaluationTask):
 
 
 class GS2013Task(EvaluationTask):
-    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=False):
-        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, get_embedding=get_embedding)
+    def __init__(self, SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name, pretrained_embedding_dir,
+                 get_embedding=False):
+        super().__init__(SRC_DIR, EXPERIMENT_DIR, model_name, experiment_name,
+                         pretrained_embedding_dir=pretrained_embedding_dir, get_embedding=get_embedding)
         self.gs = pd.read_csv(os.path.join(SRC_DIR, 'evaluation/task_data/GS2013.csv'))
         # Lemmatize...
         for noun_col in ['subject', 'object']:
