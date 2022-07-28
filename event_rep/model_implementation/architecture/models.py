@@ -244,8 +244,8 @@ class MTRFv4Res(BaseModel):
             w2v_emb_path = os.path.join(self.PRETRAINED_DIR, 'GoogleNews-vectors-negative300.bin.gz')
             w2v_url = 'https://drive.google.com/uc?id=0B7XkCwpI5KDYNlNUTTlSS21pQmM'
             if not os.path.exists(w2v_emb_path):
-                self.logger.info(f'Word2Vec embeddings not present. Please download from {w2v_url} and place'
-                                 f' in event_rep/pretrained_embeddings. No need to extract.')
+                self.logger.error(f'Word2Vec embeddings not present. Please download from {w2v_url} and place'
+                                  f' in event_rep/pretrained_embeddings. No need to extract.')
                 sys.exit(1)
             self.logger.info(f'Reading Word2Vec embeddings from {w2v_emb_path}')
             w2v_model = KeyedVectors.load_word2vec_format(w2v_emb_path, binary=False)
@@ -473,7 +473,7 @@ class MTRFv8Res(MTRFv6Res):
     def __init__(self, hp_set: HyperparameterSet, **kwargs):
         super().__init__(hp_set, **kwargs)
         # For v8, instead of context embedding being a Lambda average layer,
-        # it will just be a flatten layer.
+        # it will just be a Flatten layer.
         self.flatten_to_context_emb = Flatten(name='context_embedding')
         # Additionally, the residual block will be projections
         # to the 50 dimensional vectors.
