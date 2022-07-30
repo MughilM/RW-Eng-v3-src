@@ -26,7 +26,7 @@ BibTex:
 
 ## Key Dependencies
 
-- **Tested OS:** Ubuntu 18.04, Windows
+- **Tested OS:** Ubuntu 18.04, Windows, Debian 10
 - Python 3.7
 - Tensorflow 2.4
 - CUDA 11/10.1
@@ -36,6 +36,9 @@ Numerous problems were encountered using Python versions above 3.7 as well as Te
 ## Setting Up
 
 Once NVIDIA, CUDA, and cuDNN libraries are installed and verified with `nvidia-smi` and `nvcc --version`, run the following commands to set up and activate an Anaconda environment with our libraries.
+
+### Google Cloud
+If you have access to Google Cloud we recommend using the following image **Debian 10 based Deep Learning VM for TensorFlow Enterprise 2.1 with Cuda 11.0 M94** which comes with preinstalled drivers and tensorflow version compatible with this project.
 
 ```bash
 git clone https://github.com/MughilM/RW-Eng-v3-src.git
