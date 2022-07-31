@@ -49,7 +49,7 @@ conda activate rweng2-wheres-the-learning
 
 Make sure to select the correct environment file pertaining to your OS. This will create the `rweng2-wheres-the-learning` environment. The quickest way to test GPU visibility is to run `python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"`. If all is working corrcetly, you should see a single entry with your GPU listed.
 
-Once activated the conda env, you may need to add the following as well:
+Once activated the conda env, you may need to add the following as well (not required if you are on GCP and used the VM Deep learning image mentioned above):
 ```bash
 conda install -c conda-forge cudatoolkit=11.2 cudnn=8.1.0
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/
