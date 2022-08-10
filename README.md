@@ -1,4 +1,5 @@
 # RW-Eng-v3 (arXiv Release)
+[![arXiv](https://img.shields.io/badge/arXiv-2208.04749-b31b1b.svg)](https://arxiv.org/abs/2208.04749)
 
 This branch holds our research that was released as part of the arXiv paper.
 
@@ -9,8 +10,8 @@ The corpus contains documents coming from the British National Corpus (BNC) and 
 
 If you use this corpus or the code in this repository, please cite us (See details below).
 
-## Please cite:
-Yuval Marton, Asad Sayeed (2021). *Thematic fit bits: Annotation quality and quantity for event participant representation.* http://arxiv.org/abs/2105.06097
+## For the lexical reference, please cite:
+Yuval Marton, Asad Sayeed (2022). *Thematic fit bits: Annotation quality and quantity for event participant representation.* http://lrec-conf.org/proceedings/lrec2022/pdf/2022.lrec-1.556.pdf
 
 BibTex:
 ```
@@ -19,6 +20,21 @@ BibTex:
       author={Yuval Marton and Asad Sayeed},
       year={2021},
       eprint={2105.06097},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+```
+
+## For the modeling and learning analysis, please cite:
+Mughilan Muthupari, Samrat Halder, Asad Sayeed, Yuval Marton (2022). *Where's the Learning in Representation Learning for Compositional Semantics and the Case of Thematic Fit* https://arxiv.org/abs/2208.04749
+
+BibTex:
+```
+@misc{muthupari-halder-sayeed-marton-2022-RW-eng-v3,
+      title={Where's the Learning in Representation Learning for Compositional Semantics and the Case of Thematic Fit},
+      author={Mughilan Muthupari and Samrat Halder and Asad Sayeed and Yuval Marton},
+      year={2022},
+      eprint={2208.04749},
       archivePrefix={arXiv},
       primaryClass={cs.CL}
 }
