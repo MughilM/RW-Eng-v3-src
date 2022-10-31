@@ -10,17 +10,17 @@ The corpus contains documents coming from the British National Corpus (BNC) and 
 If you use this corpus or the code in this repository, please cite us (See details below).
 
 ## Please cite:
-Yuval Marton, Asad Sayeed (2021). *Thematic fit bits: Annotation quality and quantity for event participant representation.* http://arxiv.org/abs/2105.06097
+Yuval Marton, Asad Sayeed (LREC 2022). *Thematic fit bits: Annotation quality and quantity interplay for event participant representation.* 
 
 BibTex:
 ```
-@misc{marton-sayeed-2021-RW-eng-v2,
-      title={Thematic fit bits: Annotation quality and quantity for event participant representation},
-      author={Yuval Marton and Asad Sayeed},
-      year={2021},
-      eprint={2105.06097},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL}
+@inproceedings{marton-sayeed-lrec2022-RW-eng-v2,
+    title={Thematic Fit Bits: Annotation Quality and Quantity Interplay for Event Participant Representation}, 
+    author={Yuval Marton and Asad Sayeed},
+    booktitle = "Proceedings of the 13th Language Resources and Evaluation Conference",
+    month = "June",
+    year={2022},
+    url="https://lrec2020.lrec-conf.org/media/filer_public/85/25/8525e46e-fa71-4b94-9142-e6876ff99f83/day3.htm"
 }
 ```
 
